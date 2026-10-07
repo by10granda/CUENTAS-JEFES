@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { createServer } from 'node:http';
-import { handleRequest } from './handler.ts';
+import { handleRequest } from './handler.js';
 
 const port = Number(process.env.PORT || 3001);
 createServer((req, res) => { void handleRequest(req, res); }).listen(port, '127.0.0.1', () => {

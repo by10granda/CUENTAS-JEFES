@@ -1,1 +1,1 @@
-export { handleRequest as default } from '../server/handler.ts';
+export { handleRequest as default } from '../server/handler.js';

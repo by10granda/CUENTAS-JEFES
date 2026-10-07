@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { allowedEmails, cookieToken, readSession, sessionCookie, sessionSecret, signSession, validOrigin, validateUpload } from './security.ts';
+import { allowedEmails, cookieToken, readSession, sessionCookie, sessionSecret, signSession, validOrigin, validateUpload } from './security.js';
 
 type Request = IncomingMessage & { body?: unknown };
 const READ = new Set(['bootstrap', 'movements', 'statistics']);

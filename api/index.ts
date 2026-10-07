@@ -1,3 +1,3 @@
-import { handleRequest } from '../server/handler.ts';
+import { handleRequest } from '../server/handler.js';
 
 export default handleRequest;
