@@ -1,0 +1,37 @@
+{
+  "name": "cuentas-gerencia",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:api": "tsx watch server/dev.ts",
+    "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
+    "test": "tsx --test tests/*.test.ts tests/*.test.mjs",
+    "test:e2e": "playwright test",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-oauth/google": "^0.12.2",
+    "dotenv": "^17.2.3",
+    "google-auth-library": "^10.5.0",
+    "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.8.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  }
+}
