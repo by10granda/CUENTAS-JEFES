@@ -23,7 +23,7 @@ export interface MovementInput {
   HORA: string;
   TIPO: string;
   JEFE: string;
-  CUENTA: string;
+  CUENTA?: string;
   CATEGORIA: string;
   SUBCATEGORIA?: string;
   FORMA_PAGO: string;
@@ -45,6 +45,7 @@ export interface MovementInput {
   CLAVE_IDEMPOTENCIA: string;
 }
 export interface Movement extends MovementInput {
+  CUENTA: string;
   ID: string;
   UPDATED_AT: string;
   CREATED_AT?: string;

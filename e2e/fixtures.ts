@@ -29,7 +29,7 @@ export const testAccount: AccountRow = {
 
 export function normalizedMovement(input: MovementInput, ID: string): Movement {
   return {
-    ...input, ID, SUBTOTAL: Math.round(input.CANTIDAD * input.VALOR_UNITARIO * 100) / 100,
+    ...input, CUENTA: input.CUENTA || '', ID, SUBTOTAL: Math.round(input.CANTIDAD * input.VALOR_UNITARIO * 100) / 100,
     NUMERO_FACTURA: input.FACTURA || '', UPDATED_AT: timestamp, CREATED_AT: timestamp,
     CREADO_POR: testUser.username, USUARIO_REGISTRO: testUser.username,
   };
@@ -37,7 +37,7 @@ export function normalizedMovement(input: MovementInput, ID: string): Movement {
 
 export function accountingFixtures(): Movement[] {
   const common: MovementInput = {
-    FECHA: '2026-10-07', HORA: '12:00', TIPO: 'Ingreso', JEFE: '1', CUENTA: testAccount.ID,
+    FECHA: '2026-10-07', HORA: '12:00', TIPO: 'Ingreso', JEFE: '1',
     CATEGORIA: 'category-1', FORMA_PAGO: 'payment-1', DESCRIPCION: 'Ingreso de prueba',
     CANTIDAD: 1, VALOR_UNITARIO: 100, TOTAL: 100, TOTAL_MANUAL: false, ESTADO: 'Pagado', PAGADO: 100,
     CLAVE_IDEMPOTENCIA: '11111111-1111-4111-8111-111111111111',
@@ -57,16 +57,18 @@ interface MockState {
   bootstrap: Bootstrap;
   movements: Movement[];
   creates: MovementInput[];
+  updates: (MovementInput & { ID: string; UPDATED_AT: string })[];
   catalogWrites: { sheet: string; row: Record<string, unknown> }[];
   failNextCreate: boolean;
+  failNextUpdate: boolean;
   unexpected: string[];
 }
 
 export const test = base.extend<{ mock: MockState }>({
   mock: async ({ page }, use) => {
     const state: MockState = {
-      configMissing: false, user: testUser, logins: [], actions: [], bootstrap: emptyBootstrap(), movements: [], creates: [],
-      catalogWrites: [], failNextCreate: false, unexpected: [],
+      configMissing: false, user: testUser, logins: [], actions: [], bootstrap: emptyBootstrap(), movements: [], creates: [], updates: [],
+      catalogWrites: [], failNextCreate: false, failNextUpdate: false, unexpected: [],
     };
     await page.route('**/*', async route => {
       const request = route.request();
@@ -83,7 +85,7 @@ export const test = base.extend<{ mock: MockState }>({
       if (!url.pathname.startsWith('/api/')) { await route.continue(); return; }
       const action = url.searchParams.get('action');
       const reads = ['config', 'session', 'bootstrap', 'movements'];
-      const writes = ['login', 'logout', 'saveCatalog', 'create'];
+      const writes = ['login', 'logout', 'saveCatalog', 'create', 'update'];
       if (!action || ![...reads, ...writes].includes(action) || request.method() !== (writes.includes(action) ? 'POST' : 'GET')) {
         state.unexpected.push(`API ${request.method()} ${request.url()}`); await route.abort(); return;
       }
@@ -113,10 +115,10 @@ export const test = base.extend<{ mock: MockState }>({
         case 'saveCatalog': {
           const body = request.postDataJSON();
           state.catalogWrites.push(body);
-          if (body.sheet !== 'CUENTAS') { state.unexpected.push(`catalog ${body.sheet}`); await route.abort(); return; }
-          data = { ...body.row, ID: testAccount.ID, UPDATED_AT: timestamp, SALDO_ACTUAL: body.row.SALDO_INICIAL };
-          state.bootstrap.cuentas.push(data as AccountRow);
-          break;
+          if (body.sheet === 'CUENTAS') {
+            await route.fulfill({ status: 403, json: { success: false, message: 'Catalogo historico de solo lectura' } }); return;
+          }
+          state.unexpected.push(`catalog ${body.sheet}`); await route.abort(); return;
         }
         case 'create': {
           const input = request.postDataJSON().movement as MovementInput;
@@ -128,6 +130,18 @@ export const test = base.extend<{ mock: MockState }>({
           }
           data = normalizedMovement(input, `test-created-${state.movements.length + 1}`);
           state.movements.push(data as Movement);
+          break;
+        }
+        case 'update': {
+          const input = request.postDataJSON().movement as MockState['updates'][number];
+          state.updates.push(input);
+          if (state.failNextUpdate) {
+            state.failNextUpdate = false;
+            await route.fulfill({ status: 502, json: { success: false, message: 'Fallo temporal de prueba' } }); return;
+          }
+          const previous = state.movements.find(m => m.ID === input.ID)!;
+          data = normalizedMovement({ ...previous, ...input }, input.ID);
+          state.movements = state.movements.map(m => m.ID === input.ID ? data as Movement : m);
           break;
         }
         default: state.unexpected.push(`API ${request.method()} ${request.url()}`); await route.abort(); return;

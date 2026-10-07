@@ -84,16 +84,8 @@ export function validOrigin(req: IncomingMessage): boolean {
   } catch { return false; }
 }
 
-export function validateUpload(payload: Record<string, unknown>): void {
-  const { fileName, mimeType, base64 } = payload;
-  if (typeof fileName !== 'string' || !fileName.trim() || fileName.length > 200 || /[\x00-\x1f/\\]/.test(fileName)) throw new Error('Nombre de archivo invalido');
-  if (typeof base64 !== 'string' || !base64 || base64.length > 6990508 || base64.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(base64)) throw new Error('Archivo base64 invalido');
-  const padding = base64.indexOf('=');
-  if (padding >= 0 && (padding < base64.length - 2 || !/^={1,2}$/.test(base64.slice(padding)))) throw new Error('Archivo base64 invalido');
-  const bytes = Buffer.from(base64, 'base64');
-  if (!bytes.length || bytes.length > 5 * 1024 * 1024 || bytes.toString('base64') !== base64) throw new Error('El archivo supera 5 MB o es invalido');
-  const valid = mimeType === 'image/jpeg' ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 :
-    mimeType === 'image/png' ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) :
-    mimeType === 'application/pdf' ? bytes.subarray(0, 5).toString('ascii') === '%PDF-' : false;
-  if (!valid) throw new Error('Solo se permiten JPG, PNG o PDF con contenido valido');
+export function driveUrl_(value: unknown): boolean {
+  return typeof value === 'string' && !/\s/.test(value) && (value === '' ||
+    /^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/(?:view|preview)(?:\?[A-Za-z0-9_=%&.~+\-]*)?$/.test(value) ||
+    /^https:\/\/drive\.google\.com\/open\?id=[A-Za-z0-9_-]+(?:&[A-Za-z0-9_=%&.~+\-]*)?$/.test(value));
 }

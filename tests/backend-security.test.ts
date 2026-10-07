@@ -2,7 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
-import { authenticate, authConfigured, signSession, readSession, validOrigin, validateUpload, sessionCookie } from '../server/security.ts';
+import { authenticate, authConfigured, signSession, readSession, validOrigin, driveUrl_, sessionCookie } from '../server/security.ts';
 import { handleRequest } from '../server/handler.ts';
 
 beforeEach(() => {
@@ -157,19 +157,25 @@ test('Origin policy is exact: same host, configured origin, localhost 5173 only 
   assert.equal(validOrigin(request('https://app.example', 'app.example')), true);
 });
 
-test('upload validates strict base64, size, MIME and magic bytes', () => {
-  for (const [mimeType, bytes] of [
-    ['image/jpeg', Buffer.from([255, 216, 255, 0])],
-    ['image/png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])],
-    ['application/pdf', Buffer.from('%PDF-1.7')]
-  ] as const) validateUpload({ fileName: 'receipt', mimeType, base64: bytes.toString('base64') });
-  for (const p of [
-    { fileName: '../evil.pdf', mimeType: 'application/pdf', base64: 'JVBERi0=' },
-    { fileName: 'x', mimeType: 'image/jpeg', base64: 'JVBERi0=' },
-    { fileName: 'x', mimeType: 'application/pdf', base64: 'JVBERi0=\n' },
-    { fileName: 'x', mimeType: 'application/pdf', base64: Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64') },
-    { fileName: 'x', mimeType: 'text/html', base64: 'JVBERi0=' }
-  ]) assert.throws(() => validateUpload(p));
+test('receipt URL validator accepts only optional exact-host Drive file links', () => {
+  for (const value of ['',
+    'https://drive.google.com/file/d/Ab_12-xy/view',
+    'https://drive.google.com/file/d/Ab_12-xy/preview?usp=sharing&resourcekey=0-a+b%3D',
+    'https://drive.google.com/file/d/ID/view?usp=drivesdk',
+    'https://drive.google.com/file/d/ID/view?usp=drive_link',
+    'https://drive.google.com/open?id=ID_-12&usp=sharing&resourcekey=0-key'
+  ]) assert.equal(driveUrl_(value), true, value);
+  for (const value of [undefined, null, 123, ' ',
+    'http://drive.google.com/file/d/ID/view', 'https://drive.google.com.evil/file/d/ID/view',
+    'https://user@drive.google.com/file/d/ID/view', 'https://drive.google.com:443/file/d/ID/view',
+    'https://drive.google.com/file/d/ID/view#fragment', 'https://drive.google.com/file/d/ID/view\n',
+    ' https://drive.google.com/file/d/ID/view', 'https://drive.google.com/file/d/ID/view?x=a b',
+    'https://drive.google.com/file/d/ID/view?next=https://evil.example',
+    'https://drive.google.com/file/d//view', 'https://drive.google.com/file/d/ID/edit',
+    'https://drive.google.com/file/d/ID/view/extra', 'https://drive.google.com/open?id=',
+    'https://drive.google.com/open?id=ID/extra', 'https://drive.google.com/open?usp=sharing&id=ID',
+    'https://drive.google.com/file/d/ID%20/view', 'https://evil.example'
+  ]) assert.equal(driveUrl_(value), false, String(value));
 });
 
 test('HTTP contract: config public and minimal, private reads unauthorized, writes CSRF protected', async () => {
@@ -249,11 +255,24 @@ test('Vercel parsed bodies get the same JSON, content-type and size validation',
   assert.equal(oversized.json.success, false);
 });
 
-test('maximum local 5 MiB upload accepted; noncanonical base64 is rejected', () => {
-  const bytes = Buffer.alloc(5 * 1024 * 1024);
-  bytes.write('%PDF-');
-  validateUpload({ fileName: 'max.pdf', mimeType: 'application/pdf', base64: bytes.toString('base64') });
-  assert.throws(() => validateUpload({ fileName: 'x.pdf', mimeType: 'application/pdf', base64: 'JVBERi1=' }));
+test('removed upload action returns 404 without forwarding to GAS', async () => {
+  const realFetch = globalThis.fetch;
+  let forwarded = false;
+  globalThis.fetch = (async () => { forwarded = true; throw new Error('Must not forward'); }) as typeof fetch;
+  try {
+    for (const method of ['GET', 'POST']) {
+      let output = '';
+      const req = { ...request('http://localhost:5173'), method, url: '/api/index?action=upload',
+        body: {}, headers: { ...request().headers, origin: 'http://localhost:5173',
+          'content-type': 'application/json', cookie: `gerencia_session=${signSession({ username: 'test-only-user', name: 'Test Only' })}` }
+      } as IncomingMessage & { body: unknown };
+      const res = { statusCode: 0, setHeader() {}, end(value: string) { output = value; } } as unknown as ServerResponse;
+      await handleRequest(req, res);
+      assert.equal(res.statusCode, 404);
+      assert.deepEqual(JSON.parse(output), { success: false, message: 'Accion desconocida' });
+    }
+    assert.equal(forwarded, false);
+  } finally { globalThis.fetch = realFetch; }
 });
 
 test('oversized chunked HTTP body returns JSON 413 without destroying the response socket', async () => {

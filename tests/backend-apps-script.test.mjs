@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createHash, randomUUID } from 'node:crypto';
+import { driveUrl_ } from '../server/security.ts';
 
 const source = readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
 
@@ -37,9 +38,7 @@ function harness() {
     insertSheet: name => (sheets[name] = new Sheet(name)),
     getSpreadsheetTimeZone: () => 'Etc/UTC'
   };
-  const properties = { GAS_API_SECRET: 'shared-secret', DRIVE_FOLDER_ID: 'folder' };
-  const files = [];
-  let sharing = 'PRIVATE';
+  const properties = { GAS_API_SECRET: 'shared-secret' };
   let held = false;
   let rejectLock = false;
   const context = vm.createContext({
@@ -52,18 +51,7 @@ function harness() {
       getUuid: randomUUID,
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
       computeDigest: (_algo, value) => [...createHash('sha256').update(value).digest()].map(v => v > 127 ? v - 256 : v),
-      base64Decode: value => [...Buffer.from(value, 'base64')].map(v => v > 127 ? v - 256 : v),
-      base64Encode: value => Buffer.from(value.map(v => (v + 256) % 256)).toString('base64'),
-      newBlob: (bytes, mime, name) => ({ bytes, mime, name }),
       formatDate: date => date.toISOString().slice(0, 10)
-    },
-    DriveApp: {
-      Access: { PRIVATE: 'PRIVATE' }, Permission: { NONE: 'NONE' },
-      getFolderById: () => ({ getSharingAccess: () => sharing, createFile: blob => {
-        const file = { blob, id: randomUUID(), trashed: false, setSharing(access, permission) { this.access = access; this.permission = permission; }, getId() { return this.id; }, setTrashed(value) { this.trashed = value; } };
-        files.push(file);
-        return file;
-      } })
     }
   });
   vm.runInContext(source, context, { filename: 'Code.gs' });
@@ -74,15 +62,20 @@ function harness() {
     context.setupSpreadsheet();
     const jefe = call('saveCatalog', { sheet: 'JEFES', row: { NOMBRE: 'Approved jefe', ESTADO: 'Activo' } }).data;
     const otherJefe = call('saveCatalog', { sheet: 'JEFES', row: { NOMBRE: 'Second approved jefe', ESTADO: 'Activo' } }).data;
-    const account = call('saveCatalog', { sheet: 'CUENTAS', row: { NOMBRE: 'Operating', JEFE: jefe.ID, SALDO_INICIAL: 100, ESTADO: 'Activo' } }).data;
-    const destination = call('saveCatalog', { sheet: 'CUENTAS', row: { NOMBRE: 'Reserve', JEFE: jefe.ID, SALDO_INICIAL: 0, ESTADO: 'Activo' } }).data;
-    const foreign = call('saveCatalog', { sheet: 'CUENTAS', row: { NOMBRE: 'Foreign', JEFE: otherJefe.ID, SALDO_INICIAL: 0, ESTADO: 'Activo' } }).data;
+    const seedAccount = row => {
+      const account = { ID: randomUUID(), ESTADO: 'Activo', UPDATED_AT: 'historical-version', TIPO: 'Historical type', ...row };
+      context.appendDirect_(ss, 'CUENTAS', account);
+      return account;
+    };
+    const account = seedAccount({ NOMBRE: 'Operating', JEFE: jefe.ID, SALDO_INICIAL: 100 });
+    const destination = seedAccount({ NOMBRE: 'Reserve', JEFE: jefe.ID, SALDO_INICIAL: 0 });
+    const foreign = seedAccount({ NOMBRE: 'Foreign', JEFE: otherJefe.ID, SALDO_INICIAL: 0 });
     const category = call('saveCatalog', { sheet: 'CATEGORIAS', row: { NOMBRE: 'Approved category', ESTADO: 'Activo' } }).data;
     const method = call('saveCatalog', { sheet: 'FORMAS_PAGO', row: { NOMBRE: 'Approved method', ESTADO: 'Activo' } }).data;
     const movement = (changes = {}) => ({ FECHA: '2026-10-07', HORA: '12:30', TIPO: 'Gasto', JEFE: jefe.ID, CUENTA: account.ID, CATEGORIA: category.ID, FORMA_PAGO: method.ID, DESCRIPCION: 'Test', CANTIDAD: 1, VALOR_UNITARIO: 40, TOTAL: 40, TOTAL_MANUAL: false, ESTADO: 'Pendiente', CLAVE_IDEMPOTENCIA: randomUUID(), ...changes });
     return { jefe, otherJefe, account, destination, foreign, category, method, movement };
   };
-  return { context, call, rows, ready, sheets, ss, properties, files, setSharing: value => { sharing = value; }, rejectLock: () => { rejectLock = true; }, locked: () => held };
+  return { context, call, rows, ready, sheets, ss, properties, rejectLock: () => { rejectLock = true; }, locked: () => held };
 }
 
 test('setup refuses incompatible existing targets before ANY changes; preserves Hoja1', () => {
@@ -198,7 +191,9 @@ test('linked payments reduce obligation once, debit actual cash only, forbid ove
   assert.equal(stats.egresos, 40);
   assert.equal(stats.pendiente, 40);
   assert.equal(h.call('create', { movement: { ...paymentInput, CLAVE_IDEMPOTENCIA: randomUUID(), TOTAL: 41, VALOR_UNITARIO: 41 } }).success, false);
-  assert.equal(h.call('create', { movement: { ...paymentInput, CLAVE_IDEMPOTENCIA: randomUUID(), CUENTA: f.destination.ID } }).success, false);
+  const otherAccountPayment = h.call('create', { movement: { ...paymentInput, CLAVE_IDEMPOTENCIA: randomUUID(), CUENTA: f.destination.ID } });
+  assert.equal(otherAccountPayment.success, true);
+  assert.equal(h.call('void', { id: otherAccountPayment.data.ID, updatedAt: otherAccountPayment.data.UPDATED_AT }).success, true);
   assert.equal(h.call('create', { movement: { ...paymentInput, CLAVE_IDEMPOTENCIA: randomUUID(), JEFE: f.otherJefe.ID, CUENTA: f.foreign.ID } }).success, false);
   assert.equal(h.call('update', { movement: original }).status, 409);
   assert.equal(h.call('void', { id: original.ID, updatedAt: original.UPDATED_AT }).status, 409);
@@ -232,19 +227,25 @@ test('transfers, income, refunds, loan/advance directions, withdrawals and paid 
   assert.equal(h.call('bootstrap').data.cuentas.find(a => a.ID === f.account.ID).SALDO_ACTUAL, -107);
 });
 
-test('catalog restricted fields, no deletion, account identity locked after use, inactive refs rejected', () => {
+test('catalog restricted fields, no deletion, accounts read-only, unchanged inactive refs allow edits', () => {
   const h = harness(); const f = h.ready();
   assert.equal(h.call('saveCatalog', { sheet: 'MOVIMIENTOS', row: {} }).success, false);
   assert.equal(h.call('saveCatalog', { sheet: 'JEFES', row: { NOMBRE: 'x', ESTADO: 'Activo', ADMIN: true } }).success, false);
   assert.equal(h.call('saveCatalog', { sheet: 'JEFES', row: { ID: 'unknown', NOMBRE: 'x', ESTADO: 'Activo' } }).status, 404);
   const original = h.call('create', { movement: f.movement() }).data;
-  assert.equal(h.call('saveCatalog', { sheet: 'CUENTAS', row: { ...f.account, SALDO_INICIAL: 200 } }).status, 409);
-  assert.equal(h.call('saveCatalog', { sheet: 'CUENTAS', row: { ...f.account, JEFE: f.otherJefe.ID } }).status, 409);
+  const accounts = h.rows('CUENTAS'), audits = h.rows('AUDITORIA');
+  for (const row of [{ NOMBRE: 'New account', JEFE: f.jefe.ID, SALDO_INICIAL: 0, ESTADO: 'Activo' },
+    { ...f.account, SALDO_INICIAL: 200 }, { ...f.account, JEFE: f.otherJefe.ID }, { ...f.account, ESTADO: 'Inactivo' }]) {
+    assert.equal(h.call('saveCatalog', { sheet: 'CUENTAS', row }).status, 403);
+  }
+  assert.deepEqual(h.rows('CUENTAS'), accounts);
+  assert.deepEqual(h.rows('AUDITORIA'), audits);
   const result = h.call('saveCatalog', { sheet: 'CATEGORIAS', row: { ...f.category, ESTADO: 'Inactivo' } });
   assert.equal(result.success, true);
   assert.equal(h.call('create', { movement: f.movement() }).success, false);
-  assert.equal(h.call('update', { movement: original }).success, false);
-  assert.equal(h.call('void', { id: original.ID, updatedAt: original.UPDATED_AT }).success, true);
+  const edited = h.call('update', { movement: { ...original, DESCRIPCION: 'Unrelated edit' } });
+  assert.equal(edited.success, true);
+  assert.equal(h.call('void', { id: original.ID, updatedAt: edited.data.UPDATED_AT }).success, true);
   const state = h.rows('ESTADOS')[0];
   assert.equal(h.call('saveCatalog', { sheet: 'ESTADOS', row: { ...state, NOMBRE: 'Foo' } }).success, false);
 });
@@ -267,22 +268,17 @@ test('audit failure rolls back mutation and does not report silent success', () 
   assert.equal(h.rows('MOVIMIENTOS')[0].ESTADO, 'Pendiente');
 });
 
-test('upload is private, magic checked, public folders rejected, audit failure trashes file', () => {
-  const h = harness(); h.ready();
-  const payload = { fileName: 'receipt.pdf', mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.7').toString('base64') };
-  assert.equal(h.call('upload', { ...payload, mimeType: 'image/png' }).success, false);
-  h.setSharing('ANYONE');
-  assert.equal(h.call('upload', payload).status, 503);
-  assert.equal(h.files.length, 0);
-  h.setSharing('PRIVATE');
-  const result = h.call('upload', payload);
-  assert.equal(result.success, true);
-  assert.equal(h.files[0].access, 'PRIVATE');
-  assert.match(result.data.url, /^https:\/\/drive\.google\.com\/file\/d\//);
-  assert.equal(h.rows('AUDITORIA').at(-1).ACCION, 'SUBIR_COMPROBANTE');
-  h.sheets.AUDITORIA.failWrites = 1;
-  assert.equal(h.call('upload', payload).success, false);
-  assert.equal(h.files[1].trashed, true);
+test('removed GAS upload action is unknown and historical upload audits are preserved', () => {
+  const h = harness(); h.context.setupSpreadsheet();
+  h.context.appendDirect_(h.ss, 'AUDITORIA', { ID: 'legacy-upload', ACCION: 'SUBIR_COMPROBANTE', HOJA: 'DRIVE', REGISTRO_ID: 'legacy-file', DESPUES: '{"url":"historical"}' });
+  const before = JSON.stringify(h.sheets);
+  assert.equal(h.call('upload', { fileName: 'receipt.pdf', base64: 'JVBERi0=' }).status, 404);
+  assert.equal(JSON.stringify(h.sheets), before);
+  h.context.setupSpreadsheet();
+  assert.equal(JSON.stringify(h.sheets), before);
+  assert.equal(h.context.upload_, undefined);
+  const manifest = JSON.parse(readFileSync(new URL('../apps-script/appsscript.json', import.meta.url), 'utf8'));
+  assert.deepEqual(manifest.oauthScopes, ['https://www.googleapis.com/auth/spreadsheets']);
 });
 
 test('statistics filter validation, global balances and pending totals remain independent of payment filters', () => {
@@ -323,15 +319,18 @@ test('failed rollback is explicitly reported; formula-like user text is written 
   assert.match(result.message, /restauracion/);
 });
 
-test('GAS accepts the exact 5 MiB limit without regex stack overflow and rejects invalid padding', () => {
-  const h = harness(); h.ready();
-  const bytes = Buffer.alloc(5 * 1024 * 1024);
-  bytes.write('%PDF-');
-  const payload = { fileName: 'maximum.pdf', mimeType: 'application/pdf', base64: bytes.toString('base64') };
-  const result = h.call('upload', payload);
-  assert.equal(result.success, true, result.message);
-  assert.equal(result.data.size, bytes.length);
-  for (const base64 of ['JVBE=Ri0', 'JVBERi1=', 'JVBERi0===', 'JVBERi0=\n']) assert.equal(h.call('upload', { ...payload, base64 }).success, false);
+test('GAS and Node expose identical strict receipt URL patterns', () => {
+  const h = harness();
+  const nodeSource = readFileSync(new URL('../server/security.ts', import.meta.url), 'utf8');
+  const patterns = text => text.split('\n').filter(line => line.includes('/^https:')).map(line => line.trim());
+  assert.deepEqual(patterns(source), patterns(nodeSource));
+  for (const url of ['', 'https://drive.google.com/file/d/ID/view?usp=sharing',
+    'https://drive.google.com/file/d/ID/preview?resourcekey=0-a+b%3D&usp=drive_link',
+    'https://drive.google.com/open?id=ID&usp=drivesdk',
+    'https://user@drive.google.com/file/d/ID/view', 'https://drive.google.com/file/d/ID/view\n',
+    'https://drive.google.com/file/d/ID/view#x', 'https://drive.google.com/open?id=ID/path', null]) {
+    assert.equal(h.context.driveUrl_(url), driveUrl_(url), String(url));
+  }
 });
 
 test('approved setup preserves existing names and rows, handles numeric ID collisions with UUIDs', () => {
@@ -470,9 +469,6 @@ test('optional catalog TIPO validates and survives frontend omission, custom acc
   const { TIPO, ...frontendRow } = franco;
   const edited = h.call('saveCatalog', { sheet: 'JEFES', row: { ...frontendRow, NOMBRE: 'Franco Becerra' } }).data;
   assert.equal(edited.TIPO, 'Jefe');
-  const account = h.call('saveCatalog', { sheet: 'CUENTAS', row: { NOMBRE: 'Real account', JEFE: '1', ESTADO: 'Activo', SALDO_INICIAL: 0, TIPO: 'Caja' } }).data;
-  const { TIPO: accountType, ...accountInput } = account;
-  assert.equal(h.call('saveCatalog', { sheet: 'CUENTAS', row: accountInput }).data.TIPO, 'Caja');
   assert.equal(h.call('saveCatalog', { sheet: 'JEFES', row: { NOMBRE: 'No optional type', ESTADO: 'Activo' } }).success, true);
   assert.equal(h.call('saveCatalog', { sheet: 'JEFES', row: { NOMBRE: 'Invalid type', ESTADO: 'Activo', TIPO: {} } }).success, false);
   const custom = h.call('saveCatalog', { sheet: 'ESTADOS', row: { NOMBRE: 'Aprobado', ESTADO: 'Activo' } });
@@ -527,4 +523,167 @@ test('upgrading the previous schema appends optional headers without rewriting f
   assert.equal(updated.success, true, updated.message);
   assert.equal(updated.data.SUBTOTAL, 40);
   assert.equal(updated.data.USUARIO_REGISTRO, 'test-only-user');
+});
+
+test('setup alone supports accountless obligations, linked settlement, transfers and investment totals', () => {
+  const h = harness(); h.context.setupSpreadsheet();
+  const movement = changes => ({ FECHA: '2026-10-07', HORA: '12:30', TIPO: 'Gasto', JEFE: '1',
+    CATEGORIA: 'CAT-1', FORMA_PAGO: 'FP-1', DESCRIPCION: 'Accountless investment', CANTIDAD: 1,
+    VALOR_UNITARIO: 80, TOTAL: 80, TOTAL_MANUAL: false, ESTADO: 'Pendiente', CLAVE_IDEMPOTENCIA: randomUUID(), ...changes });
+  const create = changes => {
+    const result = h.call('create', { movement: movement(changes) });
+    assert.equal(result.success, true, result.message);
+    assert.equal(result.data.CUENTA, '');
+    assert.equal(result.data.CUENTA_DESTINO_ID, '');
+    return result.data;
+  };
+  const original = create({});
+  const paid = create({ CUENTA: '', ESTADO: 'Pagado', TOTAL: 20, VALOR_UNITARIO: 20 });
+  const payment = create({ TIPO: 'Pago', ESTADO: 'Pagado', TOTAL: 30, VALOR_UNITARIO: 30, MOVIMIENTO_ORIGEN_ID: original.ID });
+  const transfer = create({ TIPO: 'Transferencia', ESTADO: 'Pagado', TOTAL: 15, VALOR_UNITARIO: 15 });
+  assert.equal(h.call('create', { movement: movement({ TIPO: 'Pago', ESTADO: 'Pagado', TOTAL: 51, VALOR_UNITARIO: 51, MOVIMIENTO_ORIGEN_ID: original.ID }) }).success, false);
+  assert.equal(h.call('create', { movement: movement({ TIPO: 'Pago', ESTADO: 'Pagado', JEFE: '2', MOVIMIENTO_ORIGEN_ID: original.ID }) }).success, false);
+  assert.equal(h.call('update', { movement: original }).status, 409);
+  assert.equal(h.call('void', { id: original.ID, updatedAt: original.UPDATED_AT }).status, 409);
+  for (const changes of [{ TIPO: 'Transferencia', TOTAL: 0, VALOR_UNITARIO: 0, ESTADO: 'Pagado' },
+    { TIPO: 'Transferencia' }, { JEFE: '' }, { CATEGORIA: '' }, { FORMA_PAGO: '' }]) {
+    assert.equal(h.call('create', { movement: movement(changes) }).success, false);
+  }
+  assert.deepEqual(h.call('bootstrap').data.cuentas, []);
+  const stats = h.call('statistics').data;
+  assert.deepEqual(stats.resumen, { cantidad: 4, ingresos: 0, egresos: 50, gastos: 100, pendiente: 50, transferencias: 15, neto: -50 });
+  assert.deepEqual(stats.saldos, []);
+  assert.deepEqual(stats.porCategoria, [{ CATEGORIA: 'CAT-1', TOTAL: 100 }]);
+  const loaded = h.call('movements').data;
+  assert.equal(loaded.find(m => m.ID === original.ID).SALDO_PENDIENTE, 50);
+  for (const record of [paid, payment, transfer]) {
+    const updated = h.call('update', { movement: { ...record, CUENTA: undefined, CUENTA_DESTINO_ID: undefined, DESCRIPCION: 'Edited accountless' } });
+    assert.equal(updated.success, true, updated.message);
+    assert.equal(updated.data.CUENTA, '');
+    assert.equal(updated.data.CUENTA_DESTINO_ID, '');
+  }
+  assert.equal(h.rows('CUENTAS').length, 0);
+});
+
+test('receipt URLs roundtrip, omission preserves, explicit blank clears, malformed URLs reject without writes', () => {
+  const h = harness(); const f = h.ready();
+  for (const url of ['https://drive.google.com/file/d/Ab_12-xy/view?usp=sharing',
+    'https://drive.google.com/file/d/ID/preview?usp=drive_link&resourcekey=0-a+b%3D',
+    'https://drive.google.com/file/d/ID/view?usp=drivesdk',
+    'https://drive.google.com/open?id=ID&usp=sharing&resourcekey=0-key']) {
+    const created = h.call('create', { movement: f.movement({ CUENTA: undefined, COMPROBANTE_URL: url }) }).data;
+    assert.equal(created.COMPROBANTE_URL, url);
+    assert.equal(h.call('movements').data.find(m => m.ID === created.ID).COMPROBANTE_URL, url);
+    const edited = h.call('update', { movement: { ...created, COMPROBANTE_URL: undefined, DESCRIPCION: 'Keep receipt' } });
+    assert.equal(edited.success, true, edited.message);
+    assert.equal(edited.data.COMPROBANTE_URL, url);
+    const cleared = h.call('update', { movement: { ...edited.data, COMPROBANTE_URL: '' } });
+    assert.equal(cleared.success, true, cleared.message);
+    assert.equal(cleared.data.COMPROBANTE_URL, '');
+    const audit = h.rows('AUDITORIA').at(-1);
+    assert.equal(JSON.parse(audit.ANTES).COMPROBANTE_URL, url);
+    assert.equal(JSON.parse(audit.DESPUES).COMPROBANTE_URL, '');
+    const before = JSON.stringify(h.sheets);
+    for (const bad of [' https://drive.google.com/file/d/ID/view', 'https://drive.google.com/file/d/ID/view\n',
+      'https://drive.google.com/file/d/ID/view#x', 'https://user@drive.google.com/file/d/ID/view',
+      'https://drive.google.com.evil/file/d/ID/view', 'https://drive.google.com/open?id=ID/path',
+      'https://drive.google.com/file/d/ID/view?next=https://evil.example', null, false]) {
+      assert.equal(h.call('create', { movement: f.movement({ COMPROBANTE_URL: bad }) }).success, false, String(bad));
+      assert.equal(h.call('update', { movement: { ...cleared.data, COMPROBANTE_URL: bad } }).success, false, String(bad));
+    }
+    assert.equal(JSON.stringify(h.sheets), before);
+  }
+});
+
+test('historical inactive account references and metadata survive edits, owner changes clear omitted accounts', () => {
+  const h = harness(); const f = h.ready();
+  const expense = h.call('create', { movement: f.movement({ ESTADO: 'Pagado' }) }).data;
+  const transfer = h.call('create', { movement: f.movement({ TIPO: 'Transferencia', ESTADO: 'Pagado', CUENTA_DESTINO_ID: f.destination.ID }) }).data;
+  const headers = h.sheets.CUENTAS.data[0];
+  for (const row of h.sheets.CUENTAS.data.slice(1)) {
+    if ([f.account.ID, f.destination.ID].includes(row[headers.indexOf('ID')])) row[headers.indexOf('ESTADO')] = 'Inactivo';
+  }
+  const accounts = h.rows('CUENTAS');
+  const audits = h.rows('AUDITORIA');
+  h.context.setupSpreadsheet();
+  assert.deepEqual(h.rows('CUENTAS'), accounts);
+  assert.deepEqual(h.rows('AUDITORIA'), audits);
+  const bootstrap = h.call('bootstrap');
+  assert.equal(bootstrap.success, true, bootstrap.message);
+  assert.equal(bootstrap.data.cuentas.find(a => a.ID === f.account.ID).SALDO_ACTUAL, 20);
+  for (const account of accounts) {
+    const loaded = bootstrap.data.cuentas.find(a => a.ID === account.ID);
+    for (const field of Object.keys(account)) assert.equal(loaded[field], account[field]);
+  }
+  for (const original of [expense, transfer]) {
+    const edited = h.call('update', { movement: { ...original, CUENTA: undefined, CUENTA_DESTINO_ID: undefined, DESCRIPCION: 'Unrelated edit' } });
+    assert.equal(edited.success, true, edited.message);
+    assert.equal(edited.data.CUENTA, original.CUENTA);
+    assert.equal(edited.data.CUENTA_DESTINO_ID, original.CUENTA_DESTINO_ID);
+    const explicit = h.call('update', { movement: { ...edited.data, DESCRIPCION: 'Unchanged inactive refs' } });
+    assert.equal(explicit.success, true, explicit.message);
+    assert.equal(h.call('update', { movement: { ...explicit.data, JEFE: f.otherJefe.ID } }).success, false);
+    const moved = h.call('update', { movement: { ...explicit.data, JEFE: f.otherJefe.ID, CUENTA: undefined, CUENTA_DESTINO_ID: undefined } });
+    assert.equal(moved.success, true, moved.message);
+    assert.equal(moved.data.CUENTA, '');
+    assert.equal(moved.data.CUENTA_DESTINO_ID, '');
+    assert.equal(h.call('update', { movement: { ...moved.data, CUENTA: f.account.ID, JEFE: f.jefe.ID, CUENTA_DESTINO_ID: original.CUENTA_DESTINO_ID } }).success, false);
+  }
+  assert.equal(h.call('create', { movement: f.movement() }).success, false);
+  assert.deepEqual(h.rows('CUENTAS'), accounts);
+  assert.equal(h.call('bootstrap').data.cuentas.find(a => a.ID === f.account.ID).SALDO_ACTUAL, 100);
+  assert.equal(h.call('statistics').data.resumen.gastos, 40);
+});
+
+test('account-bound transfers require both accounts and legacy unknown nonblank accounts remain inconsistent', () => {
+  const h = harness(); const f = h.ready();
+  for (const changes of [{ CUENTA_DESTINO_ID: '' }, { CUENTA: '', CUENTA_DESTINO_ID: f.destination.ID },
+    { CUENTA_DESTINO_ID: 'unknown' }, { CUENTA_DESTINO_ID: f.account.ID }, { CUENTA_DESTINO_ID: f.foreign.ID }]) {
+    assert.equal(h.call('create', { movement: f.movement({ TIPO: 'Transferencia', ESTADO: 'Pagado', ...changes }) }).success, false);
+  }
+  const transfer = h.call('create', { movement: f.movement({ TIPO: 'Transferencia', ESTADO: 'Pagado', CUENTA_DESTINO_ID: f.destination.ID }) }).data;
+  for (const changes of [{ CUENTA: '' }, { CUENTA_DESTINO_ID: '' }]) {
+    assert.equal(h.call('update', { movement: { ...transfer, ...changes } }).success, false);
+  }
+  const accounts = h.rows('CUENTAS');
+  for (const m of [{ TIPO: 'Gasto', CUENTA: 'unknown' },
+    { TIPO: 'Transferencia', CUENTA: f.account.ID, CUENTA_DESTINO_ID: 'unknown' },
+    { TIPO: 'Transferencia', CUENTA: '', CUENTA_DESTINO_ID: 'unknown' }]) {
+    assert.throws(() => h.context.balances_(accounts, [{ ESTADO: 'Pagado', PAGADO: 1, ...m }]), /inexistente|incompletas/);
+  }
+  const sheet = h.sheets.MOVIMIENTOS;
+  sheet.data[1][sheet.data[0].indexOf('CUENTA_DESTINO_ID')] = 'unknown';
+  assert.equal(h.call('bootstrap').status, 503);
+  assert.equal(h.call('statistics').status, 503);
+  assert.equal(h.call('movements').success, true);
+});
+
+test('mixed accountless and historical ledger keeps legacy balances and investment totals independent', () => {
+  const h = harness(); const f = h.ready();
+  const create = changes => {
+    const result = h.call('create', { movement: f.movement({ ESTADO: 'Pagado', ...changes }) });
+    assert.equal(result.success, true, result.message);
+    return result.data;
+  };
+  const original = create({ ESTADO: 'Pendiente' });
+  create({ TIPO: 'Pago', CUENTA: undefined, MOVIMIENTO_ORIGEN_ID: original.ID });
+  create({ CUENTA: '', TOTAL: 20, VALOR_UNITARIO: 20 });
+  create({ TIPO: 'Ingreso', CUENTA: undefined, TOTAL: 10, VALOR_UNITARIO: 10 });
+  create({ TIPO: 'Transferencia', CUENTA: undefined });
+  const historicalTransfer = create({ TIPO: 'Transferencia', CUENTA_DESTINO_ID: f.destination.ID });
+  const edited = h.call('update', { movement: { ...historicalTransfer, CUENTA: undefined, CUENTA_DESTINO_ID: undefined, DESCRIPCION: 'Preserve active transfer' } });
+  assert.equal(edited.success, true, edited.message);
+  assert.equal(edited.data.CUENTA, f.account.ID);
+  assert.equal(edited.data.CUENTA_DESTINO_ID, f.destination.ID);
+  const bootstrap = h.call('bootstrap').data;
+  assert.equal(bootstrap.cuentas.find(a => a.ID === f.account.ID).SALDO_ACTUAL, 60);
+  assert.equal(bootstrap.cuentas.find(a => a.ID === f.destination.ID).SALDO_ACTUAL, 40);
+  const stats = h.call('statistics').data;
+  assert.equal(stats.resumen.gastos, 60);
+  assert.equal(stats.resumen.pendiente, 0);
+  assert.equal(stats.resumen.egresos, 60);
+  assert.equal(stats.resumen.ingresos, 10);
+  assert.equal(stats.resumen.transferencias, 80);
+  assert.equal(stats.saldos.find(a => a.CUENTA === f.account.ID).SALDO, 60);
+  assert.equal(stats.saldos.find(a => a.CUENTA === f.destination.ID).SALDO, 40);
 });

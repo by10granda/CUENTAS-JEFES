@@ -88,7 +88,7 @@ export function filterMovements(ledger: Movement[], filters: Filters): Movement[
   const search = filters.buscar.trim().toLocaleLowerCase('es');
   return ledger.filter(m =>
     (!filters.desde || m.FECHA >= filters.desde) && (!filters.hasta || m.FECHA <= filters.hasta) &&
-    (!filters.jefe || m.JEFE === filters.jefe) && (!filters.cuenta || m.CUENTA === filters.cuenta || m.CUENTA_DESTINO_ID === filters.cuenta) &&
+    (!filters.jefe || m.JEFE === filters.jefe) &&
     (!filters.categoria || m.CATEGORIA === filters.categoria) && (!filters.tipo || m.TIPO === filters.tipo) &&
     (!filters.estado || effectiveState(m, ledger) === filters.estado) && (!filters.formaPago || m.FORMA_PAGO === filters.formaPago) &&
     (!filters.proveedor || m.PROVEEDOR === filters.proveedor) &&

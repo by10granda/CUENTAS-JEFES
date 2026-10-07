@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { authenticate, authConfigured, cookieToken, readSession, sessionCookie, signSession, validOrigin, validateUpload } from './security.js';
+import { authenticate, authConfigured, cookieToken, readSession, sessionCookie, signSession, validOrigin } from './security.js';
 
 type Request = IncomingMessage & { body?: unknown };
 const READ = new Set(['bootstrap', 'movements', 'statistics']);
-const WRITE = new Set(['create', 'update', 'void', 'saveCatalog', 'upload']);
+const WRITE = new Set(['create', 'update', 'void', 'saveCatalog']);
 const MAX_BODY = 7 * 1024 * 1024;
 class HttpError extends Error {
   status: number;
@@ -83,9 +83,6 @@ export async function handleRequest(req: Request, res: ServerResponse): Promise<
       const raw = url.searchParams.get('filters');
       try { payload = raw ? { filters: JSON.parse(raw) } : { filters: Object.fromEntries([...url.searchParams].filter(([key]) => key !== 'action')) }; }
       catch { throw new HttpError(400, 'Filtros invalidos'); }
-    }
-    if (action === 'upload') {
-      try { validateUpload(payload); } catch (error) { throw new HttpError(400, (error as Error).message); }
     }
     const endpoint = process.env.GAS_WEB_APP_URL;
     const secret = process.env.GAS_API_SECRET;

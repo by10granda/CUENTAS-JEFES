@@ -4,19 +4,20 @@ Aplicacion administrativa para Franco Becerra y Josselyn Becerra. React 19 + Typ
 
 ## Estado De La Entrega
 
-Frontend, servidor, script y pruebas implementados. Existe el despliegue publico https://cuentas-jefes.vercel.app y se comprobaron previamente la web y la API publica. La nueva version con login por usuario y contrasena esta pendiente de desplegar hasta enviar los cambios a `main`. La integracion financiera protegida con Sheets/Drive NO esta validada en vivo: el propietario debe actualizar y republicar Apps Script y configurar las variables privadas. Sin configuracion de acceso el sistema deniega el acceso y muestra instrucciones, nunca datos financieros de ejemplo.
+Frontend, servidor, script y pruebas implementados. Existe el despliegue publico https://cuentas-jefes.vercel.app y se comprobaron previamente la web y la API publica. La version actual con login por usuario/contrasena, movimientos sin cuentas y comprobantes por URL esta pendiente de enviar a `main` y desplegar; no se afirma que ya este activa en publico. La integracion financiera protegida con Sheets NO esta validada en vivo: el propietario debe actualizar y republicar Apps Script y configurar las variables privadas. Sin configuracion de acceso el sistema deniega el acceso y muestra instrucciones, nunca datos financieros de ejemplo.
 
 Se reviso el documento por lectura: la hoja predeterminada no devolvio filas ni encabezados. El propietario confirmo que solo existe una hoja y autorizo crear la estructura. No se ha escrito en el documento remoto.
 
 ## Funciones
 
-- Dashboard general y por responsable, gastos por categoria/persona/mes, distribucion de pagos, evolucion de gastos y del disponible.
+- Dashboard general y por responsable, total invertido actualizado con los movimientos consultados y todos los filtros compartidos, gastos por categoria/persona/mes, distribucion de pagos y evolucion de gastos.
 - Crear, consultar, editar y anular los nueve tipos de movimiento. No existe borrado fisico en la API.
 - Prestamos y adelantos recibidos/entregados; reembolsos que vuelven al fondo.
-- Pagos parciales y pagos vinculados a una obligacion; validacion de sobrepago y aislamiento por jefe/cuenta.
+- Pagos parciales y pagos vinculados a una obligacion; validacion de sobrepago y aislamiento por jefe, sin exigir igualdad de cuenta.
 - Busqueda por ID, descripcion, proveedor, factura y observaciones; filtros compartidos y reportes diarios/semanales/mensuales/rango.
 - Descarga real de Excel con fechas/importes numericos y PDF horizontal paginado con totales contables.
-- Comprobantes privados en Drive; solo la URL se almacena en Sheets.
+- Comprobantes opcionales mediante enlaces HTTPS de Drive; solo la URL se almacena en Sheets, sin cargas de archivos.
+- Registro directo por jefe, sin crear, seleccionar ni mostrar cuentas. Las hojas y referencias historicas de cuentas se conservan.
 - Catalogos editables, bloqueo optimista, idempotencia de creacion, auditoria de valores anteriores y posteriores.
 - Formulario conservado en memoria y sessionStorage del navegador, separado por username. No es una base de datos ni un modo offline. No almacena una copia local del libro financiero.
 
@@ -26,14 +27,14 @@ Se reviso el documento por lectura: la hoja predeterminada no devolvio filas ni 
 Navegador React
     -> /api/index (Node local o funcion de Vercel)
     -> Google Apps Script (secreto servidor a servidor)
-    -> Google Sheets / Drive
+    -> Google Sheets
 ```
 
 La capa Node es necesaria para un frontend independiente sin exponer secretos y para evitar el problema de CORS de Apps Script. El enlace de la aplicacion es publico: cualquier persona con el usuario y la contrasena compartidos, que el propietario configurara posteriormente, puede iniciar sesion. Este es el acceso previsto para la asignacion; no requiere Gmail, OAuth ni Google Cloud. La API valida `APP_USERNAME` y `APP_PASSWORD` del servidor y entrega una cookie firmada de ocho horas, HttpOnly, SameSite=Lax y Secure en produccion. La sesion devuelve `{username, name}` y se revalida en cada solicitud; cambiar usuario, contrasena o `SESSION_SECRET` invalida las sesiones anteriores. Las escrituras validan Origin.
 
 El username auditado procede de la sesion verificada, no del formulario. Todos los usuarios de estas credenciales comparten la misma identidad y pueden administrar catalogos; no hay roles ni atribucion por persona. Las nuevas auditorias usan el username compartido; se conservan los correos de registros y auditorias historicos, sin reescribirlos.
 
-La contrasena y los secretos viven exclusivamente en `.env` local o variables privadas del servidor, nunca en Sheets ni en el bundle/configuracion publica del frontend. Los datos financieros se almacenan exclusivamente en Sheets; Drive conserva los comprobantes privados. No uses prefijos `VITE_` para secretos ni publiques `.env` en Git. `/api/config` solo publica `{authMode: "password", configured: true/false}`, sin usuario, contrasena ni secretos.
+La contrasena y los secretos viven exclusivamente en `.env` local o variables privadas del servidor, nunca en Sheets ni en el bundle/configuracion publica del frontend. Los datos financieros y las URLs se almacenan exclusivamente en Sheets; la app no crea ni administra archivos de Drive. No uses prefijos `VITE_` para secretos ni publiques `.env` en Git. `/api/config` solo publica `{authMode: "password", configured: true/false}`, sin usuario, contrasena ni secretos.
 
 No hay bloqueo distribuido ni limite de intentos de contrasena implementado. El endpoint publico de login permite intentos repetidos sin limite propio; validar Origin no impide ataques desde clientes externos. Para produccion real, configura y verifica reglas de firewall/rate limiting en Vercel para `/api/login` y `/api/index?action=login`, y utiliza una contrasena aleatoria fuerte. Esta proteccion es una recomendacion pendiente, no una capacidad ya implementada.
 
@@ -45,9 +46,8 @@ IMPORTANTE: el Spreadsheet suministrado era legible sin iniciar sesion. Antes de
 2. Abre **Extensiones > Apps Script**. El codigo completo esta en `apps-script/Code.gs`.
 3. En la configuracion del editor activa la visualizacion de `appsscript.json`; utiliza el manifiesto de `apps-script/appsscript.json`. La zona UTC del manifiesto no cambia las fechas/horas locales ingresadas en el formulario. Configura la zona del Spreadsheet si vas a editar fechas directamente alli.
 4. En **Configuracion del proyecto > Propiedades de la secuencia de comandos**, agrega `GAS_API_SECRET` con un secreto aleatorio largo. No es la contrasena de Google.
-5. Crea una carpeta privada en Drive para comprobantes y registra su ID como `DRIVE_FOLDER_ID`. Es el segmento posterior a `/folders/` en su URL. Puedes terminar esta parte posteriormente, pero las cargas no funcionaran sin ella.
-6. Ejecuta `inspectStructure` desde el editor y revisa el registro de ejecucion. Esto es de solo lectura.
-7. Ejecuta `setupSpreadsheet` y autoriza Sheets y Drive con la cuenta propietaria. El script inspecciona todos los destinos antes de modificarlos y rechaza encabezados incompatibles. No elimina ni renombra la hoja original.
+5. Ejecuta `inspectStructure` desde el editor y revisa el registro de ejecucion. Esto es de solo lectura. `DRIVE_FOLDER_ID` es obsoleto y no se utiliza.
+6. Para la configuracion inicial, ejecuta `setupSpreadsheet` y autoriza Sheets con la cuenta propietaria. El manifiesto actual solo solicita el alcance de Sheets, no Drive. El script inspecciona todos los destinos antes de modificarlos y rechaza encabezados incompatibles. No elimina ni renombra la hoja original.
 
 Se crean estas hojas: `MOVIMIENTOS`, `JEFES`, `CUENTAS`, `CATEGORIAS`, `FORMAS_PAGO`, `ESTADOS`, `AUDITORIA`, `CONFIGURACION`.
 
@@ -58,7 +58,7 @@ La estructura conserva los datos funcionales solicitados. Nombres canonicos usad
 ## 2. Desplegar La Web App
 
 1. En Apps Script selecciona **Implementar > Nueva implementacion > Aplicacion web**.
-2. **Ejecutar como: Yo**, la cuenta propietaria con acceso al documento y la carpeta.
+2. **Ejecutar como: Yo**, la cuenta propietaria con acceso al documento.
 3. **Quien tiene acceso: Cualquier persona**. La funcion es accesible para el servidor de Vercel, pero NO publica datos: cada POST exige el secreto; GET siempre responde no autorizado.
 4. Autoriza y copia la URL que termina en `/exec`.
 5. Registra esa URL en `GAS_WEB_APP_URL` del servidor. No uses `/dev` ni la URL de Sheets.
@@ -68,31 +68,13 @@ El secreto del script y `GAS_API_SECRET` de Node deben ser identicos. No se nece
 
 ### Actualizacion Obligatoria Del Script Existente
 
-El `Code.gs` remoto anterior espera `request.user.email` y rechazara la nueva identidad `{username, name}` hasta actualizar su version desplegada. En `doPost`, los dos cambios son:
+Carga el archivo completo mas reciente `apps-script/Code.gs` y el manifiesto actual en el proyecto existente. Usa **Implementar > Gestionar implementaciones > Editar > Nueva version > Implementar**, conservando la misma URL `/exec`, `GAS_API_SECRET` y todas las tablas y filas existentes. Guardar el editor no actualiza la version publicada.
 
-1. Sustituye exactamente la validacion de email por la de username:
+La actualizacion ya no es solo email a username: incluye `CUENTA` opcional en `normalize_`, preservacion de referencias historicas al editar, vinculos por el mismo jefe sin igualdad de cuenta, transferencias sin cuentas, `CUENTAS` de solo lectura y comprobantes por URL sin uploads. Un parche antiguo que solo cambia identidad es insuficiente; como minimo el nuevo normalizador es obligatorio, y se debe usar el archivo completo para mantener todas las reglas coherentes.
 
-```diff
--    if (!request.user || typeof request.user.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(request.user.email)) fail_('Usuario invalido', 401);
-+    if (!request.user || typeof request.user.username !== 'string' || !request.user.username.trim() || request.user.username.length > 100 || /[\x00-\x1f\x7f-\x9f]/.test(request.user.username)) fail_('Usuario invalido', 401);
-```
+Si al guardar aparece exactamente **`ID requerido CUENTAS`**, el `/exec` remoto sigue ejecutando el normalizador antiguo que exige cuenta. Actualiza y republica **Nueva version** en ese mismo despliegue y reintenta. **Nunca crees una cuenta ficticia para evitar el error.**
 
-2. Sustituye `request.user.email` por `request.user.username` en las cinco invocaciones:
-
-```diff
--      case 'create': data = create_(ss, payload, request.user.email); break;
-+      case 'create': data = create_(ss, payload, request.user.username); break;
--      case 'update': data = update_(ss, payload, request.user.email); break;
-+      case 'update': data = update_(ss, payload, request.user.username); break;
--      case 'void': data = void_(ss, payload, request.user.email); break;
-+      case 'void': data = void_(ss, payload, request.user.username); break;
--      case 'saveCatalog': data = saveCatalog_(ss, payload, request.user.email); break;
-+      case 'saveCatalog': data = saveCatalog_(ss, payload, request.user.username); break;
--      case 'upload': data = upload_(ss, payload, request.user.email); break;
-+      case 'upload': data = upload_(ss, payload, request.user.username); break;
-```
-
-Se recomienda cargar el archivo completo mas reciente `apps-script/Code.gs` en el proyecto existente y usar **Implementar > Gestionar implementaciones > Editar > Nueva version > Implementar**. Conserva la misma URL `/exec` y las propiedades privadas. Guardar el editor no actualiza la version publicada. Esta migracion de identidad mantiene el esquema de campos: si ya esta actualizado, no requiere repetir `setupSpreadsheet`, reinicializar ni borrar datos. GET publico a `/exec` siempre devuelve `No autorizado`; es el comportamiento previsto, no una prueba fallida de conexion.
+Esta actualizacion no agrega ni cambia encabezados: conserva `CUENTAS`, `CUENTA` y `CUENTA_DESTINO_ID` para el historial, aunque los movimientos nuevos omitan o dejen vacia la cuenta. Con el esquema ya compatible no hace falta repetir `setupSpreadsheet`, reinicializar ni borrar datos. Si la API pide setup por una estructura anterior, inspecciona primero; el setup existente agrega solo columnas opcionales compatibles sin borrar filas. GET publico a `/exec` siempre devuelve `No autorizado`; es el comportamiento previsto, no una prueba fallida de conexion.
 
 ## 3. Configurar El Acceso Compartido En Vercel
 
@@ -107,7 +89,7 @@ En el proyecto Vercel configura estas seis variables para Production, directamen
 | `GAS_API_SECRET` | Mismo secreto privado configurado en Apps Script |
 | `APP_ORIGIN` | `https://cuentas-jefes.vercel.app` |
 
-Usuario y contrasena se comparan exactamente, sin normalizar mayusculas ni espacios. Configura las credenciales posteriormente y compartelas solo por un canal privado con quienes deban acceder. No se necesitan cliente OAuth, IDs de Google ni configuracion de Google Cloud; solo la autorizacion de Sheets/Drive por la cuenta propietaria del script.
+Usuario y contrasena se comparan exactamente, sin normalizar mayusculas ni espacios. Configura las credenciales posteriormente y compartelas solo por un canal privado con quienes deban acceder. Las variables de login no cambian. No se necesitan nuevas credenciales Google, cliente OAuth de Drive ni configuracion de Google Cloud; solo la autorizacion de Sheets por la cuenta propietaria del script. Abrir un comprobante privado requiere por separado acceso de su visor en Google.
 
 ## 4. Probar Localmente
 
@@ -143,8 +125,8 @@ Abre **http://localhost:5173**. `npm run dev` inicia Vite y la API en el puerto 
 ## 5. Probar Un Registro Real
 
 1. Inicia sesion con el usuario y la contrasena compartidos. Deben aparecer Franco y Josselyn y los catalogos iniciales desde Sheets, una vez actualizado y republicado el script.
-2. En **Configuracion > Cuentas**, crea una cuenta real, selecciona su jefe y especifica expresamente el saldo inicial real. Si no existen fondos iniciales y asi corresponde, ingresa cero. No registres el mismo fondo otra vez como ingreso.
-3. En **Nuevo movimiento**, selecciona jefe, cuenta, fecha, hora, tipo, categoria, forma de pago y descripcion. Ingresa una operacion real autorizada y su precio final con IVA incluido.
+2. Abre **Nuevo movimiento** directamente; no necesitas cuentas ni saldo inicial.
+3. Selecciona jefe, fecha, hora, tipo, categoria, forma de pago y descripcion. Ingresa una operacion real autorizada y su precio final con IVA incluido; si corresponde, agrega una URL opcional de comprobante.
 4. Comprueba el subtotal y el total. Si corresponde, activa total manual. No se suma IVA.
 5. Guarda. Debe mostrarse **Movimiento registrado correctamente.**
 6. Verifica la fila en `MOVIMIENTOS`: ID unico, usuario de registro y timestamps. Verifica una entrada `CREAR` en `AUDITORIA`.
@@ -157,19 +139,19 @@ Si deseas usar un dato ficticio de prueba, hazlo SOLO en un Spreadsheet de prueb
 1. Abre **Movimientos** y busca el ID o factura del registro anterior.
 2. Aplica filtros de fecha, jefe, categoria, tipo, estado y forma de pago; verifica dashboard y reportes.
 3. En herramientas de desarrollo del navegador, la solicitud `/api/index?action=movements` debe responder `{success:true,data:[...]}`. Sin sesion debe responder 401.
-4. Para una obligacion real pendiente, usa **Pendientes > Pagar**. El pago queda vinculado al original; disminuye el pendiente y el fondo, pero no suma un nuevo gasto.
+4. Para una obligacion real pendiente, usa **Pendientes > Pagar**. El pago queda vinculado al original del mismo jefe; disminuye el pendiente y registra el egreso efectivo, pero no suma un nuevo gasto ni inversion.
 5. Edita un registro sin pagos vinculados y verifica nueva auditoria y `UPDATED_AT`. Si otro usuario ya lo modifico, se exige recargar.
 6. Anula solo cuando corresponda. La fila permanece en el historial y deja de afectar los totales. Para anular/editar un original con pagos vinculados, primero deben anularse dichos pagos.
 7. Descarga Excel y PDF desde Reportes. Los totales excluyen anulados y separan obligaciones de egresos para no duplicar pagos.
 
 ## 7. Publicar Con Git Y Vercel
 
-Repositorio existente: https://github.com/by10granda/CUENTAS-JEFES, rama `main`. Despliegue existente: https://cuentas-jefes.vercel.app. `.gitignore` excluye secretos, dependencias y resultados de pruebas. La nueva version de autenticacion aun debe enviarse a `main` y desplegarse; no se afirma que el despliegue actual ya la incluya.
+Repositorio existente: https://github.com/by10granda/CUENTAS-JEFES, rama `main`. Despliegue existente: https://cuentas-jefes.vercel.app. `.gitignore` excluye secretos, dependencias y resultados de pruebas. El codigo actual de frontend/servidor aun debe enviarse a `main` y desplegarse; no se afirma que el despliegue actual ya lo incluya.
 
 1. Comprueba la vinculacion del repositorio y la rama `main` en Vercel. Framework Vite; Build `npm run build`; salida `dist`. `vercel.json` contiene la configuracion.
 2. Selecciona Node 22 o superior. Las rutas `api/*.ts` se despliegan como funciones Node.
 3. Configura las seis variables de la seccion 3. En produccion `NODE_ENV` debe ser `production` (Vercel lo establece normalmente).
-4. Actualiza y republica Apps Script como **Nueva version** antes de probar la nueva identidad de usuario.
+4. Actualiza el `Code.gs` completo y el manifiesto; republica Apps Script como **Nueva version** antes de probar movimientos sin cuentas y comprobantes por URL.
 5. Envia los cambios a `main` y despliega; vuelve a desplegar tras modificar variables. Comprueba login, sesion, rotacion de contrasena y consultas/escrituras protegidas. Estas pruebas financieras en vivo siguen pendientes.
 
 **No debes colocar la URL de Apps Script en el JavaScript del frontend.** Va en `GAS_WEB_APP_URL` de Vercel/`.env`. El navegador utiliza exclusivamente `/api/index` del mismo dominio. Tampoco hay tokens de acceso secretos en el cliente.
@@ -179,22 +161,28 @@ Cada dominio de preview tiene su propio origen y configuracion de variables; uti
 ## Reglas Contables
 
 - USD, precios finales con IVA incluido. `IVA` y `IVA_PORCENTAJE` permanecen en cero; cero significa que la app no agrega impuesto, no que la factura carezca de IVA.
-- Saldo de cada cuenta = saldo inicial + ingresos/reembolsos/prestamos o adelantos recibidos - pagos efectivos/gastos pagados/retiros/prestamos o adelantos entregados, con transferencias entre cuentas.
-- Pendientes no reducen el fondo hasta el desembolso. Pago parcial reduce solo el importe pagado.
-- Un pago vinculado liquida una obligacion, no crea otro gasto. No se permiten sobrepagos ni vinculos entre jefes o cuentas diferentes.
-- Transferencias solo entre cuentas diferentes del mismo jefe. Transferencias entre jefes requieren una ampliacion contable explicita; no estan implementadas.
-- Disponible considera el historial hasta la fecha final y responde a jefe/cuenta. No se recalcula como un saldo artificial por categoria o busqueda. Pendiente es el saldo actual, incluyendo pagos posteriores al periodo seleccionado.
+- Total invertido = suma de `TOTAL` de Gasto, Compra y Pago independientes vigentes, incluidos pendientes y pagos parciales completos. Excluye anulados y pagos vinculados para no duplicar. Responde a todos los filtros compartidos y se desglosa por jefe; no depende de cuentas ni saldos iniciales.
+- Inversion no equivale a efectivo desembolsado: los egresos usan lo efectivamente pagado, incluidos abonos vinculados. Pendiente usa el total menos el pago propio y todos los pagos vinculados vigentes, incluso posteriores al periodo seleccionado.
+- Reembolsos son ingresos efectivos y no restan inversion. Prestamos, adelantos, ingresos, transferencias y retiros no suman inversion; solo anular excluye una obligacion del total, ademas de los filtros aplicados.
+- Un pago vinculado liquida una obligacion, no crea otro gasto. No se permiten sobrepagos ni vinculos entre jefes diferentes; las cuentas pueden diferir o estar vacias.
+- Transferencias nuevas sin cuentas: registro positivo y Pagado, sin inversion, ingreso/egreso ni redistribucion de dinero. Referencias historicas de transferencias se conservan; si se informan cuentas, deben ser dos distintas del mismo jefe. No se implementan transferencias entre jefes.
+- Los saldos legacy de la API solo cubren saldo inicial y registros asociados a cuentas: ingresos/reembolsos/prestamos o adelantos recibidos menos desembolsos/retiros/prestamos o adelantos entregados, con debito/credito de transferencias contabilizadas. No representan el conjunto completo de movimientos sin cuentas ni el total invertido, y no se muestran como disponible actual en la UI.
 - El estado actual mostrado/filtrado en el frontend se deriva de los pagos. Se conserva el estado registrado original en Sheets y en los reportes. El endpoint `statistics` filtra el estado registrado.
 - Estados contables actuales: Pagado, Pendiente, Pago parcial, Anulado. Se cargan de Sheets; no se permiten estados personalizados sin definir antes su efecto financiero.
-- No se impiden saldos negativos; se muestran tal como resultan del libro. Las cuentas con historial no permiten cambiar jefe/saldo inicial. Corrige mediante operaciones auditadas, no modificando la base financiera.
+- `CUENTAS` permanece de solo lectura para compatibilidad historica; `saveCatalog` sobre esa hoja responde 403. No hay creacion, edicion ni visualizacion de cuentas en la UI, ni cuentas predeterminadas ficticias. No se impiden saldos legacy negativos.
 
 ## Comprobantes
 
-La interfaz permite JPG/JPEG/PNG/PDF hasta **3 MiB** para mantenerse por debajo del limite de solicitudes de Vercel despues de codificar base64. La API admite 5 MiB localmente, pero no se promete ese tamano en Vercel. Para mas tamano se necesita otra estrategia de carga, no implementada.
+`COMPROBANTE_URL` es opcional, hasta 300 caracteres. Vacio es valido; omitirlo al editar conserva el valor existente y enviar `""` lo borra. Solo se aceptan estas expresiones exactas, sin espacios ni fragmentos:
 
-Las firmas de archivo y el tipo se validan en Node y Apps Script. Esto no sustituye un antivirus. La carpeta debe ser privada; no se publican archivos con acceso para cualquiera. Comparte expresamente la carpeta/archivos con los Gmail que necesiten abrirlos: estar autorizado en la app no concede permisos de Drive.
+```regex
+^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/(?:view|preview)(?:\?[A-Za-z0-9_=%&.~+\-]*)?$
+^https:\/\/drive\.google\.com\/open\?id=[A-Za-z0-9_-]+(?:&[A-Za-z0-9_=%&.~+\-]*)?$
+```
 
-Un archivo cargado antes de guardar o descartar un movimiento puede quedar sin asociar en Drive, con su registro de carga en auditoria. No existe limpieza automatica para evitar borrar comprobantes importantes.
+Esto admite enlaces comunes como `/file/d/ID/view?usp=sharing`, `/preview` y `/open?id=ID&usp=sharing`. No hay selector de archivos ni carga en frontend, Node o Apps Script; la accion `upload` se rechaza con 404. No existe limite de tamano de archivo porque solo se registra una URL, no su contenido. El script y manifiesto actuales no incluyen API de carga ni permiso Drive; `DRIVE_FOLDER_ID` es obsoleto.
+
+Validar el formato de una URL no acredita que el archivo exista, sea privado, seguro o accesible. Su propietario controla los permisos en Drive; las credenciales de la app no conceden acceso Google. Para abrir archivos privados, el visor necesita permisos Google por separado. Las URLs historicas inseguras no se convierten en enlaces en tablas, detalle o reportes.
 
 ## Errores Y Limites
 
@@ -204,7 +192,7 @@ Una respuesta incierta bloquea el borrador para reintentar exactamente el mismo 
 
 Sheets no ofrece transacciones ACID: el script usa LockService y restauracion de mejor esfuerzo cuando falla la escritura/auditoria. Una terminacion de ejecucion o fallo de restauracion requiere conciliacion manual. No edites movimientos directamente en Sheets: se omiten validaciones y auditoria.
 
-La consulta trae el libro completo y las tablas paginan en el navegador. Para libros grandes se necesita paginacion desde el servidor y procesamiento incremental. Aplican cuotas de Apps Script/Drive, el limite de respuesta de Vercel y un timeout de 55 segundos. No se afirma soporte ilimitado ni trabajo offline.
+La consulta trae el libro completo y las tablas paginan en el navegador. Para libros grandes se necesita paginacion desde el servidor y procesamiento incremental. Aplican cuotas de Apps Script/Sheets, los limites de solicitud/respuesta de Vercel y un timeout de 55 segundos. Node conserva el limite legacy de 7 MiB por solicitud JSON; no es un limite de comprobantes ni capacidad de carga. Vercel puede rechazar una solicitud antes del handler con su propio limite (comunmente 4.5 MB). No se afirma soporte ilimitado ni trabajo offline.
 
 ## Pruebas
 
@@ -216,9 +204,9 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de API y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, login por contrasena, formulario, reintento tras recarga, pagos vinculados y archivos Excel/PDF reales. No equivale a una prueba de autenticacion/Sheets/Drive en vivo.
+Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de API y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, login por contrasena, movimientos sin cuentas, reintentos, pagos vinculados, filtros de inversion, comprobantes por URL, preservacion historica y archivos Excel/PDF reales. No equivale a una prueba de autenticacion/Sheets ni de acceso a comprobantes en vivo.
 
-Ultimos resultados reportados por los agentes de pruebas: 38 pruebas unitarias/HTTP y 12 pruebas de navegador aprobadas. El agente principal repetira la verificacion final; esta edicion documental no ejecuta ni certifica una nueva corrida. Las comprobaciones anteriores incluyeron build correcto, `npm audit` sin vulnerabilidades reportadas, arranque conjunto local HTTP 200 y web/API publica de Vercel. No validan la integracion financiera protegida en vivo ni el nuevo despliegue de login, pendiente hasta enviar los cambios.
+Verificacion de esta version: build correcto, 43 pruebas unitarias/HTTP y 26 pruebas de navegador aprobadas. La lectura conectada de la version anterior se comprobo en Vercel. Para registrar movimientos sin cuenta y aplicar las nuevas reglas de comprobantes debe actualizarse y republicarse el Apps Script remoto; las pruebas automatizadas no sustituyen esa comprobacion en vivo.
 
 ## Archivos
 
@@ -231,7 +219,7 @@ Ultimos resultados reportados por los agentes de pruebas: 38 pruebas unitarias/H
 | `src/api.ts`, `src/types.ts` | Cliente API y contrato tipado |
 | `server/handler.ts`, `server/security.ts`, `server/dev.ts` | API, autenticacion y servidor local |
 | `api/*.ts` | Entradas de funciones Vercel |
-| `apps-script/Code.gs`, `apps-script/appsscript.json` | API Sheets/Drive, configuracion y auditoria |
+| `apps-script/Code.gs`, `apps-script/appsscript.json` | API Sheets, configuracion y auditoria, sin cargas ni alcance Drive |
 | `server/CONTRACT.md` | Contrato detallado de endpoints, campos y limites |
 | `tests/`, `e2e/`, `playwright.config.ts` | Pruebas automatizadas |
 | `.env.example`, `vercel.json`, `vite.config.ts` | Configuracion local y despliegue |
@@ -239,4 +227,4 @@ Ultimos resultados reportados por los agentes de pruebas: 38 pruebas unitarias/H
 
 ## Que Falta Para Activar La Conexion Real
 
-El propietario debe configurar posteriormente el usuario/contrasena compartidos y las otras variables privadas de la seccion 3, actualizar y republicar `Code.gs`, conservar/configurar la carpeta privada Drive y autorizar la ejecucion. Despues de enviar a `main` y desplegar, falta validar login y operaciones financieras protegidas con Sheets/Drive. Antes de produccion real, configura y verifica firewall/rate limiting de login. No compartas contrasenas, secretos o tokens por chat; configura los valores directamente en tu entorno o panel privado de Vercel. Para ayuda basta comunicar la URL publica de la aplicacion y errores sin secretos.
+El propietario debe configurar posteriormente el usuario/contrasena compartidos y las otras variables privadas de la seccion 3, actualizar `Code.gs` y el manifiesto, republicar **Nueva version** y autorizar Sheets. Conserva todas las tablas y datos; no crees cuentas para activar el registro. Despues de enviar a `main` y desplegar, falta validar login y operaciones financieras protegidas con Sheets. El acceso a comprobantes se controla por separado en Google, sin OAuth Drive de la app. Antes de produccion real, configura y verifica firewall/rate limiting de login. No compartas contrasenas, secretos o tokens por chat; configura los valores directamente en tu entorno o panel privado de Vercel. Para ayuda basta comunicar la URL publica de la aplicacion y errores sin secretos.

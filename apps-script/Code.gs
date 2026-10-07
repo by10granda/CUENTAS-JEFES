@@ -46,7 +46,7 @@ function doPost(e) {
     try { request = JSON.parse(e.postData.contents); } catch (_) { fail_('JSON invalido'); }
     if (!request || !equalSecret_(request.secret, PropertiesService.getScriptProperties().getProperty('GAS_API_SECRET'))) fail_('No autorizado', 401);
     if (!request.user || typeof request.user.username !== 'string' || !request.user.username.trim() || request.user.username.length > 100 || /[\x00-\x1f\x7f-\x9f]/.test(request.user.username)) fail_('Usuario invalido', 401);
-    var actions = ['bootstrap', 'movements', 'statistics', 'create', 'update', 'void', 'saveCatalog', 'upload'];
+    var actions = ['bootstrap', 'movements', 'statistics', 'create', 'update', 'void', 'saveCatalog'];
     if (actions.indexOf(request.action) < 0) fail_('Accion desconocida', 404);
     var payload = request.payload || {};
     if (typeof payload !== 'object' || Array.isArray(payload)) fail_('Payload invalido');
@@ -63,7 +63,6 @@ function doPost(e) {
       case 'update': data = update_(ss, payload, request.user.username); break;
       case 'void': data = void_(ss, payload, request.user.username); break;
       case 'saveCatalog': data = saveCatalog_(ss, payload, request.user.username); break;
-      case 'upload': data = upload_(ss, payload, request.user.username); break;
     }
     if (['create', 'update', 'void'].indexOf(request.action) >= 0) data = Object.assign({}, data, { FACTURA: data.NUMERO_FACTURA || '' });
     return json_({ success: true, data: data });
@@ -249,6 +248,11 @@ function uuid_(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-
 function live_(m) { return m.ESTADO !== 'Anulado'; }
 function expense_(m) { return ['Gasto', 'Compra', 'Pago'].indexOf(m.TIPO) >= 0 && !m.MOVIMIENTO_ORIGEN_ID; }
 function linked_(rows, id, excluding) { return rows.filter(function (m) { return live_(m) && m.MOVIMIENTO_ORIGEN_ID === id && m.ID !== excluding; }); }
+function driveUrl_(value) {
+  return typeof value === 'string' && !/\s/.test(value) && (value === '' ||
+    /^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/(?:view|preview)(?:\?[A-Za-z0-9_=%&.~+\-]*)?$/.test(value) ||
+    /^https:\/\/drive\.google\.com\/open\?id=[A-Za-z0-9_-]+(?:&[A-Za-z0-9_=%&.~+\-]*)?$/.test(value));
+}
 
 function normalize_(ss, input, rows, previous) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail_('movement es requerido');
@@ -258,13 +262,17 @@ function normalize_(ss, input, rows, previous) {
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(m.HORA)) fail_('HORA debe ser HH:mm');
   m.TIPO = text_(input.TIPO, 30, 'TIPO', true);
   if (TYPES.indexOf(m.TIPO) < 0) fail_('Tipo invalido');
-  ['JEFE', 'CUENTA', 'CATEGORIA', 'FORMA_PAGO'].forEach(function (key) {
+  ['JEFE', 'CATEGORIA', 'FORMA_PAGO'].forEach(function (key) {
     m[key] = text_(input[key], 100, key, true);
-    var sheet = { JEFE: 'JEFES', CUENTA: 'CUENTAS', CATEGORIA: 'CATEGORIAS', FORMA_PAGO: 'FORMAS_PAGO' }[key];
-    reference_(ss, sheet, m[key], false);
+    var sheet = { JEFE: 'JEFES', CATEGORIA: 'CATEGORIAS', FORMA_PAGO: 'FORMAS_PAGO' }[key];
+    reference_(ss, sheet, m[key], !!previous && previous[key] === m[key]);
   });
-  var account = reference_(ss, 'CUENTAS', m.CUENTA, false);
-  if (account.JEFE !== m.JEFE) fail_('La cuenta no pertenece al jefe');
+  var sameJefe = !!previous && previous.JEFE === m.JEFE;
+  m.CUENTA = text_(input.CUENTA === undefined && sameJefe ? previous.CUENTA : input.CUENTA, 100, 'CUENTA', false);
+  if (m.CUENTA) {
+    var account = reference_(ss, 'CUENTAS', m.CUENTA, sameJefe && previous.CUENTA === m.CUENTA);
+    if (account.JEFE !== m.JEFE) fail_('La cuenta no pertenece al jefe');
+  }
   m.DESCRIPCION = text_(input.DESCRIPCION, 2000, 'DESCRIPCION', true);
   ['SUBCATEGORIA', 'PROVEEDOR', 'OBSERVACIONES'].forEach(function (key) {
     m[key] = text_(input[key] === undefined && previous ? previous[key] : input[key], key === 'OBSERVACIONES' ? 2000 : 200, key, false);
@@ -290,17 +298,20 @@ function normalize_(ss, input, rows, previous) {
     if (['Recibido', 'Entregado'].indexOf(m.DIRECCION) < 0) fail_('Seleccione DIRECCION Recibido o Entregado');
   } else if (m.DIRECCION) fail_('DIRECCION solo aplica a Prestamo o Adelanto');
   m.MOVIMIENTO_ORIGEN_ID = text_(input.MOVIMIENTO_ORIGEN_ID, 100, 'MOVIMIENTO_ORIGEN_ID', false);
-  m.CUENTA_DESTINO_ID = text_(input.CUENTA_DESTINO_ID, 100, 'CUENTA_DESTINO_ID', false);
+  m.CUENTA_DESTINO_ID = text_(input.CUENTA_DESTINO_ID === undefined && sameJefe ? previous.CUENTA_DESTINO_ID : input.CUENTA_DESTINO_ID, 100, 'CUENTA_DESTINO_ID', false);
   if (m.TIPO === 'Transferencia') {
-    var destination = reference_(ss, 'CUENTAS', m.CUENTA_DESTINO_ID, false);
-    if (destination.ID === m.CUENTA || destination.JEFE !== m.JEFE) fail_('Transferencia requiere dos cuentas distintas del mismo jefe');
+    if (m.CUENTA || m.CUENTA_DESTINO_ID) {
+      if (!m.CUENTA || !m.CUENTA_DESTINO_ID) fail_('Transferencia con cuentas requiere origen y destino');
+      var destination = reference_(ss, 'CUENTAS', m.CUENTA_DESTINO_ID, sameJefe && previous.CUENTA_DESTINO_ID === m.CUENTA_DESTINO_ID);
+      if (destination.ID === m.CUENTA || destination.JEFE !== m.JEFE) fail_('Transferencia requiere dos cuentas distintas del mismo jefe');
+    }
     if (m.ESTADO !== 'Pagado' || m.TOTAL <= 0) fail_('Transferencia requiere total positivo y estado Pagado');
   } else if (m.CUENTA_DESTINO_ID) fail_('CUENTA_DESTINO_ID solo aplica a Transferencia');
   if (m.MOVIMIENTO_ORIGEN_ID) {
     if (m.TIPO !== 'Pago' || m.ESTADO !== 'Pagado' || m.TOTAL <= 0) fail_('Pago vinculado requiere tipo Pago, total positivo y estado Pagado');
     var origin = rows.filter(function (r) { return r.ID === m.MOVIMIENTO_ORIGEN_ID; })[0];
     if (!origin || !live_(origin) || !expense_(origin) || (previous && origin.ID === previous.ID)) fail_('Gasto original invalido');
-    if (origin.JEFE !== m.JEFE || origin.CUENTA !== m.CUENTA) fail_('Pago y gasto deben pertenecer al mismo jefe y cuenta');
+    if (origin.JEFE !== m.JEFE) fail_('Pago y gasto deben pertenecer al mismo jefe');
     var paid = cents_(origin.PAGADO) + linked_(rows, origin.ID, previous && previous.ID).reduce(function (sum, r) { return sum + cents_(r.PAGADO); }, 0);
     if (paid + cents_(m.TOTAL) > cents_(origin.TOTAL)) fail_('El pago supera el saldo pendiente');
   }
@@ -315,8 +326,10 @@ function normalize_(ss, input, rows, previous) {
     m.PAGADO = money_(input.PAGADO, 'PAGADO');
     if (m.PAGADO <= 0 || m.PAGADO >= m.TOTAL) fail_('Pago parcial requiere PAGADO mayor que cero y menor que TOTAL');
   }
-  m.COMPROBANTE_URL = text_(input.COMPROBANTE_URL, 300, 'COMPROBANTE_URL', false);
-  if (m.COMPROBANTE_URL && !/^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/view(?:\?usp=drivesdk)?$/.test(m.COMPROBANTE_URL)) fail_('URL de comprobante invalida');
+  var receipt = input.COMPROBANTE_URL === undefined && previous ? previous.COMPROBANTE_URL : input.COMPROBANTE_URL;
+  if (receipt === undefined) receipt = '';
+  if (!driveUrl_(receipt)) fail_('URL de comprobante invalida');
+  m.COMPROBANTE_URL = text_(receipt, 300, 'COMPROBANTE_URL', false);
   m.IVA = 0;
   m.IVA_PORCENTAJE = 0;
   return m;
@@ -395,7 +408,8 @@ function void_(ss, payload, user) {
 
 function saveCatalog_(ss, payload, user) {
   var name = payload.sheet;
-  if (['JEFES', 'CUENTAS', 'CATEGORIAS', 'FORMAS_PAGO', 'ESTADOS'].indexOf(name) < 0) fail_('Catalogo no permitido');
+  if (name === 'CUENTAS') fail_('CUENTAS es un catalogo historico de solo lectura', 403);
+  if (['JEFES', 'CATEGORIAS', 'FORMAS_PAGO', 'ESTADOS'].indexOf(name) < 0) fail_('Catalogo no permitido');
   var input = payload.row;
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail_('row es requerido');
   var allowed = SCHEMA[name].required.concat(SCHEMA[name].optional);
@@ -409,14 +423,7 @@ function saveCatalog_(ss, payload, user) {
   if (t.rows.some(function (r) { return r.ID !== row.ID && String(r.NOMBRE).toLowerCase() === row.NOMBRE.toLowerCase(); })) fail_('Nombre de catalogo duplicado', 409);
   if (name === 'ESTADOS' && STATES.indexOf(row.NOMBRE) < 0) fail_('Solo se permiten los estados contables Pagado, Pendiente, Pago parcial y Anulado; no se admiten estados personalizados');
   if (name === 'ESTADOS' && (row.ESTADO !== 'Activo' || (previous && row.NOMBRE !== previous.NOMBRE))) fail_('Los estados contables no se pueden renombrar ni desactivar');
-  if (name === 'JEFES' || name === 'CUENTAS') row.TIPO = text_(input.TIPO === undefined && previous ? previous.TIPO : input.TIPO, 100, 'TIPO', false);
-  if (name === 'CUENTAS') {
-    row.JEFE = text_(input.JEFE, 100, 'JEFE', true);
-    reference_(ss, 'JEFES', row.JEFE, false);
-    row.SALDO_INICIAL = money_(input.SALDO_INICIAL, 'SALDO_INICIAL');
-    if (previous && table_(ss, 'MOVIMIENTOS').rows.some(function (m) { return m.CUENTA === row.ID || m.CUENTA_DESTINO_ID === row.ID; }) &&
-        (previous.JEFE !== row.JEFE || cents_(previous.SALDO_INICIAL) !== cents_(row.SALDO_INICIAL))) fail_('No cambie jefe o saldo inicial de una cuenta con movimientos', 409);
-  }
+  if (name === 'JEFES') row.TIPO = text_(input.TIPO === undefined && previous ? previous.TIPO : input.TIPO, 100, 'TIPO', false);
   return commit_(ss, name, previous, row, previous ? 'EDITAR_CATALOGO' : 'CREAR_CATALOGO', user);
 }
 
@@ -441,9 +448,12 @@ function enrichedMovements_(ss) {
 }
 
 function balances_(accounts, rows) {
+  // Legacy account balances cover only accounted ledger entries, not total investment.
   var balances = Object.create(null);
   accounts.forEach(function (a) { balances[a.ID] = cents_(a.SALDO_INICIAL); });
   rows.filter(live_).forEach(function (m) {
+    if (m.TIPO === 'Transferencia' && (m.CUENTA || m.CUENTA_DESTINO_ID) && (!m.CUENTA || !m.CUENTA_DESTINO_ID)) fail_('Transferencia con cuentas incompletas', 503);
+    if (!m.CUENTA) return;
     var paid = cents_(m.PAGADO);
     var sign = ['Ingreso', 'Reembolso'].indexOf(m.TIPO) >= 0 || (['Préstamo', 'Adelanto'].indexOf(m.TIPO) >= 0 && m.DIRECCION === 'Recibido') ? 1 : -1;
     if (balances[m.CUENTA] === undefined) fail_('Movimiento con cuenta inexistente', 503);
@@ -506,42 +516,4 @@ function statistics_(ss, filters) {
     porCategoria: Object.keys(categories).map(function (id) { return { CATEGORIA: id, TOTAL: categories[id] / 100 }; }),
     saldos: accounts.filter(function (a) { return (!filters.jefe || a.JEFE === filters.jefe) && (!filters.cuenta || a.ID === filters.cuenta); }).map(function (a) { return { CUENTA: a.ID, JEFE: a.JEFE, SALDO: balances[a.ID] / 100 }; })
   };
-}
-
-function upload_(ss, payload, user) {
-  var fileName = text_(payload.fileName, 200, 'fileName', true);
-  if (/[\x00-\x1f/\\]/.test(fileName)) fail_('Nombre de archivo invalido');
-  var mime = payload.mimeType;
-  var base64 = payload.base64;
-  if (typeof base64 !== 'string' || !base64 || base64.length > 6990508 || base64.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(base64)) fail_('Archivo base64 invalido');
-  var padding = base64.indexOf('=');
-  if (padding >= 0 && (padding < base64.length - 2 || !/^={1,2}$/.test(base64.slice(padding)))) fail_('Archivo base64 invalido');
-  var bytes;
-  try { bytes = Utilities.base64Decode(base64); } catch (_) { fail_('Archivo invalido'); }
-  if (!bytes.length || bytes.length > 5 * 1024 * 1024 || Utilities.base64Encode(bytes) !== base64) fail_('El archivo supera 5 MB o es invalido', 413);
-  function byte(i) { return (bytes[i] + 256) % 256; }
-  var valid = mime === 'image/jpeg' ? byte(0) === 255 && byte(1) === 216 && byte(2) === 255 :
-    mime === 'image/png' ? [137, 80, 78, 71, 13, 10, 26, 10].every(function (v, i) { return byte(i) === v; }) :
-    mime === 'application/pdf' ? [37, 80, 68, 70, 45].every(function (v, i) { return byte(i) === v; }) : false;
-  if (!valid) fail_('Solo se permiten JPG, PNG o PDF con contenido valido');
-  var folderId = PropertiesService.getScriptProperties().getProperty('DRIVE_FOLDER_ID');
-  if (!folderId) fail_('Configure DRIVE_FOLDER_ID', 503);
-  var folder = DriveApp.getFolderById(folderId);
-  if (folder.getSharingAccess() !== DriveApp.Access.PRIVATE) fail_('La carpeta debe ser privada; no se permiten enlaces publicos', 503);
-  var file;
-  try {
-    file = folder.createFile(Utilities.newBlob(bytes, mime, fileName));
-    file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-    var result = { fileId: file.getId(), url: 'https://drive.google.com/file/d/' + file.getId() + '/view', fileName: fileName, mimeType: mime, size: bytes.length };
-    var t = table_(ss, 'AUDITORIA');
-    var row = audit_('SUBIR_COMPROBANTE', 'DRIVE', file.getId(), null, result, user);
-    var range = t.sheet.getRange(t.sheet.getLastRow() + 1, 1, 1, t.headers.length);
-    var old = range.getValues();
-    try { range.setValues([cells_(t.headers, row)]); SpreadsheetApp.flush(); }
-    catch (error) { try { range.setValues(old); SpreadsheetApp.flush(); } catch (_) { console.error('No se pudo restaurar auditoria de upload'); } throw error; }
-    return result;
-  } catch (error) {
-    if (file) { try { file.setTrashed(true); } catch (_) { console.error('No se pudo eliminar archivo sin auditoria: ' + file.getId()); } }
-    throw error;
-  }
 }
