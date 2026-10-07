@@ -87,13 +87,24 @@ export async function handleRequest(req: Request, res: ServerResponse): Promise<
     const endpoint = process.env.GAS_WEB_APP_URL;
     const secret = process.env.GAS_API_SECRET;
     if (!endpoint || !secret || !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint)) throw new Error('GAS connection is not configured');
-    let upstream: Response;
-    try {
-      upstream = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret, action, payload, user }), signal: AbortSignal.timeout(55000), redirect: 'follow' });
-    } catch { throw new HttpError(502, 'No se pudo contactar con Google Sheets. Puede reintentar con la misma clave de idempotencia.'); }
     let result;
-    try { result = await upstream.json(); } catch { throw new HttpError(502, 'Respuesta invalida de Google Sheets'); }
-    if (!upstream.ok || typeof result?.success !== 'boolean') throw new HttpError(502, 'Respuesta invalida de Google Sheets');
+    const signal = AbortSignal.timeout(55000);
+    // Google occasionally returns a non-JSON response. Retry reads only, within one timeout.
+    const attempts = READ.has(action) ? 3 : 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        let upstream: Response;
+        try {
+          upstream = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret, action, payload, user }), signal, redirect: 'follow' });
+        } catch { throw new HttpError(502, 'No se pudo contactar con Google Sheets. Puede reintentar con la misma clave de idempotencia.'); }
+        try { result = await upstream.json(); } catch { throw new HttpError(502, 'Respuesta invalida de Google Sheets'); }
+        if (!upstream.ok || typeof result?.success !== 'boolean') throw new HttpError(502, 'Respuesta invalida de Google Sheets');
+        break;
+      } catch (error) {
+        if (attempt === attempts - 1 || signal.aborted) throw error;
+        await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+      }
+    }
     if (!result.success) {
       const status = [400, 401, 403, 404, 409, 413, 503].includes(result.status) ? result.status : 502;
       throw new HttpError(status, typeof result.message === 'string' ? result.message : 'Error de Google Sheets');

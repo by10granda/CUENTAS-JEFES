@@ -237,6 +237,48 @@ test('authenticated proxy forwards server-only secret/user, filters and GAS conf
   }
 });
 
+test('proxy retries transient reads only, with bounded attempts and no retry for business errors or writes', async () => {
+  process.env.GAS_WEB_APP_URL = 'https://script.google.com/macros/s/test-deployment/exec';
+  process.env.GAS_API_SECRET = 'server-only-secret';
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  let mode: 'recover' | 'fail' | 'business' = 'recover';
+  globalThis.fetch = (async () => {
+    calls++;
+    if (mode === 'business') return new Response(JSON.stringify({ success: false, status: 409, message: 'Conflict' }));
+    if (mode === 'recover' && calls === 2) return new Response(JSON.stringify({ success: true, data: [] }));
+    return new Response('<html>Temporary Google response</html>', { headers: { 'Content-Type': 'text/html' } });
+  }) as typeof fetch;
+  const invoke = async (action: string, write = false) => {
+    let output = '';
+    const req = { ...request('http://localhost:5173'), method: write ? 'POST' : 'GET', url: '/api/index?action=' + action,
+      body: write ? { movement: {} } : undefined,
+      headers: { origin: 'http://localhost:5173', 'content-type': 'application/json',
+        cookie: `gerencia_session=${signSession({ username: 'test-only-user', name: 'Test Only' })}` }
+    } as IncomingMessage & { body: unknown };
+    const res = { statusCode: 0, setHeader() {}, end(value: string) { output = value; } } as unknown as ServerResponse;
+    await handleRequest(req, res);
+    return { status: res.statusCode, json: JSON.parse(output) };
+  };
+  try {
+    assert.deepEqual(await invoke('movements'), { status: 200, json: { success: true, data: [] } });
+    assert.equal(calls, 2);
+    calls = 0; mode = 'fail';
+    assert.equal((await invoke('bootstrap')).status, 502);
+    assert.equal(calls, 3);
+    calls = 0;
+    assert.equal((await invoke('create', true)).status, 502);
+    assert.equal(calls, 1);
+    calls = 0; mode = 'business';
+    assert.equal((await invoke('statistics')).status, 409);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.GAS_WEB_APP_URL;
+    delete process.env.GAS_API_SECRET;
+  }
+});
+
 test('Vercel parsed bodies get the same JSON, content-type and size validation', async () => {
   const invoke = async (body: unknown, contentType = 'application/json') => {
     let result = '';

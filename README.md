@@ -206,7 +206,9 @@ npm run test:e2e
 
 Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de API y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, login por contrasena, movimientos sin cuentas, reintentos, pagos vinculados, filtros de inversion, comprobantes por URL, preservacion historica y archivos Excel/PDF reales. No equivale a una prueba de autenticacion/Sheets ni de acceso a comprobantes en vivo.
 
-Verificacion de esta version: build correcto, 43 pruebas unitarias/HTTP y 26 pruebas de navegador aprobadas. La lectura conectada de la version anterior se comprobo en Vercel. Para registrar movimientos sin cuenta y aplicar las nuevas reglas de comprobantes debe actualizarse y republicarse el Apps Script remoto; las pruebas automatizadas no sustituyen esa comprobacion en vivo.
+Verificacion de esta version: build correcto, 44 pruebas unitarias/HTTP y 26 pruebas de navegador aprobadas. Se comprobo la lectura conectada del Apps Script actualizado y la restriccion de cuentas historicas de solo lectura. No se insertaron movimientos ficticios ni se modificaron los registros existentes.
+
+La API reintenta hasta tres veces las consultas cuando Google devuelve una respuesta temporal invalida o falla el transporte, dentro de un unico plazo de 55 segundos. No reintenta automaticamente escrituras ni errores de validacion del script. Si falla un guardado, conserva el borrador y su clave de idempotencia.
 
 ## Archivos
 

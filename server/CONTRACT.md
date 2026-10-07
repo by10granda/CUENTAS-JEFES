@@ -188,4 +188,6 @@ No frontend, Node or Apps Script upload exists; `upload` is rejected with 404. T
 
 ## Verification
 
-Run `npm test` for the full unit/HTTP suite; backend-only tests can be run with `npx tsx --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Tests use Node's test runner, a VM-hosted Apps Script runtime, mock Sheets and local HTTP requests, without Google writes. Verification of this version: production build, 43 unit/HTTP tests and 26 browser tests passed. Connected reads were checked on the previous deployment. Live accountless writes and the new receipt policy still require updating and republishing the remote Apps Script; automated tests do not replace that check.
+Run `npm test` for the full unit/HTTP suite; backend-only tests can be run with `npx tsx --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Tests use Node's test runner, a VM-hosted Apps Script runtime, mock Sheets and local HTTP requests, without Google writes. Verification: production build, 44 unit/HTTP tests and 26 browser tests passed. Connected reads and read-only account enforcement were checked on the updated Apps Script. No synthetic movements were inserted and existing rows were not modified.
+
+The proxy retries transport/non-JSON failures for reads only, with at most three attempts sharing one 55-second timeout. Script validation/business errors and all write operations are never retried automatically. Failed creates must retain the original client idempotency key.
