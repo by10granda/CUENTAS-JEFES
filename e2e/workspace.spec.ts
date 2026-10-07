@@ -10,7 +10,7 @@ test('missing login configuration shows setup warning and no financial workspace
   for (const variable of ['APP_USERNAME', 'APP_PASSWORD', 'SESSION_SECRET', 'GAS_WEB_APP_URL', 'GAS_API_SECRET']) {
     await expect(page.locator('.setup-guide')).toContainText(variable);
   }
-  await expect(page.locator('.setup-guide')).toContainText('entre 12 y 512 caracteres');
+  await expect(page.locator('.setup-guide')).toContainText('entre 8 y 512 caracteres');
   await expect(page.locator('.setup-guide')).toContainText('al menos 32 caracteres');
   await expect(page.locator('.login-page')).not.toContainText(/Google|Gmail|OAuth|ALLOWED_EMAILS/);
   await expect(page.getByRole('form', { name: 'Iniciar sesión' })).toHaveCount(0);

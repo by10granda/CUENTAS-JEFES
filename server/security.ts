@@ -16,7 +16,7 @@ export function authConfigured(): boolean {
   const password = process.env.APP_PASSWORD || '';
   try { sessionSecret(); } catch { return false; }
   return !!username.trim() && username.length <= 100 && !/[\x00-\x1f\x7f-\x9f]/.test(username) &&
-    password.length >= 12 && password.length <= 512 && !!password.trim();
+    password.length >= 8 && password.length <= 512 && !!password.trim();
 }
 
 export function authenticate(username: unknown, password: unknown): User | null {

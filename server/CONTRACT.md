@@ -7,7 +7,7 @@ The frontend calls `/api/index?action=ACTION` on its own origin with cookies ena
 | Node environment variable | Required | Value |
 | --- | --- | --- |
 | `APP_USERNAME` | Login | Shared username, nonblank, at most 100 characters, no control characters. Exact comparison, no trimming or case normalization. |
-| `APP_PASSWORD` | Login | Strong shared password, 12 to 512 characters, not whitespace-only. Exact comparison. Rotation invalidates existing sessions. |
+| `APP_PASSWORD` | Login | Strong shared password, 8 to 512 characters, not whitespace-only. Exact comparison. Rotation invalidates existing sessions. |
 | `SESSION_SECRET` | Session/private API | Random secret with at least 32 characters. Changing it invalidates existing sessions. |
 | `GAS_WEB_APP_URL` | Private API | `https://script.google.com/macros/s/DEPLOYMENT_ID/exec`. Use the deployed web app, not `/dev`. |
 | `GAS_API_SECRET` | Private API | Strong random shared secret; identical to the Apps Script property. |

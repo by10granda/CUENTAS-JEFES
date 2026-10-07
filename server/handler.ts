@@ -66,7 +66,7 @@ export async function handleRequest(req: Request, res: ServerResponse): Promise<
       res.setHeader('Set-Cookie', sessionCookie(req, '', true));
       return send(res, 200, { success: true, data: { user: null } });
     }
-    if (!authConfigured()) throw new HttpError(503, 'Configure APP_USERNAME, APP_PASSWORD (12 a 512 caracteres; use una contrasena fuerte) y SESSION_SECRET (al menos 32 caracteres) en Vercel.');
+    if (!authConfigured()) throw new HttpError(503, 'Configure APP_USERNAME, APP_PASSWORD (8 a 512 caracteres; use una contrasena fuerte) y SESSION_SECRET (al menos 32 caracteres) en Vercel.');
     if (action === 'login') {
       const payload = await body(req);
       const user = authenticate(payload.username, payload.password);

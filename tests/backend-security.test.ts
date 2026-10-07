@@ -25,7 +25,7 @@ test('credentials are exact, bounded, and fail closed for invalid server configu
   const token = signSession({ username, name: username });
   for (const [key, values] of [
     ['APP_USERNAME', [undefined, '', ' ', 'x'.repeat(101), 'test\nuser', 'test\x7fuser']],
-    ['APP_PASSWORD', [undefined, '', 'short', 'x'.repeat(11), ' '.repeat(12), 'x'.repeat(513)]],
+    ['APP_PASSWORD', [undefined, '', 'short', 'x'.repeat(7), ' '.repeat(8), 'x'.repeat(513)]],
     ['SESSION_SECRET', [undefined, '', 'short']]
   ] as const) {
     const original = process.env[key];
@@ -41,8 +41,9 @@ test('credentials are exact, bounded, and fail closed for invalid server configu
   process.env.APP_USERNAME = 'x'.repeat(100);
   process.env.APP_PASSWORD = 'p'.repeat(512);
   assert.ok(authenticate(process.env.APP_USERNAME, process.env.APP_PASSWORD));
-  process.env.APP_PASSWORD = 'p'.repeat(12);
+  process.env.APP_PASSWORD = 'p'.repeat(8);
   assert.equal(authConfigured(), true);
+  assert.ok(authenticate(process.env.APP_USERNAME, process.env.APP_PASSWORD));
 });
 
 test('HTTP password login, session, rotation, logout and configuration privacy', async () => {

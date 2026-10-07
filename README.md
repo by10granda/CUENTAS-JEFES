@@ -101,7 +101,7 @@ En el proyecto Vercel configura estas seis variables para Production, directamen
 | Variable | Valor |
 | --- | --- |
 | `APP_USERNAME` | Usuario compartido no vacio, hasta 100 caracteres, sin caracteres de control |
-| `APP_PASSWORD` | Contrasena fuerte compartida de 12 a 512 caracteres, no solo espacios |
+| `APP_PASSWORD` | Contrasena fuerte compartida de 8 a 512 caracteres, no solo espacios |
 | `SESSION_SECRET` | Secreto aleatorio independiente de al menos 32 caracteres |
 | `GAS_WEB_APP_URL` | URL `/exec` de la implementacion actualizada de Apps Script |
 | `GAS_API_SECRET` | Mismo secreto privado configurado en Apps Script |
@@ -118,7 +118,7 @@ Crea `.env` a partir de la plantilla `.env.example` y completa estos valores exc
 | Variable | Valor |
 | --- | --- |
 | `APP_USERNAME` | Usuario compartido, hasta 100 caracteres |
-| `APP_PASSWORD` | Contrasena fuerte de 12 a 512 caracteres |
+| `APP_PASSWORD` | Contrasena fuerte de 8 a 512 caracteres |
 | `SESSION_SECRET` | Secreto aleatorio de al menos 32 caracteres |
 | `GAS_WEB_APP_URL` | URL `/exec` de Apps Script |
 | `GAS_API_SECRET` | Mismo secreto configurado en Apps Script |
