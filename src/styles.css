@@ -90,8 +90,8 @@ label small { color: var(--muted); font-size: 11px; font-weight: 400; }
 .login-kicker { color: var(--teal); display: block; font-size: 9px; font-weight: 650; letter-spacing: .16em; margin-bottom: 20px; }
 .login-card h2 { font-family: 'Libre Baskerville', Georgia, serif; font-size: 31px; font-weight: 400; line-height: 1.4; margin-bottom: 19px; letter-spacing: -.04em; }
 .login-description { font-size: 13px; color: #7c8988; max-width: 315px; margin-bottom: 32px; line-height: 1.9; }
-.google-login { display: flex; justify-content: flex-start; min-height: 42px; }
-.auth-busy { pointer-events: none; opacity: .6; }
+.login-form { display: flex; flex-direction: column; gap: 18px; }
+.login-form .button { margin-top: 4px; }
 .login-security { display: flex; gap: 14px; border-top: 1px solid var(--border); margin-top: 31px; padding-top: 24px; }
 .login-security svg { color: #86a483; margin-top: 4px; }
 .login-security p { font-size: 11px; color: #89948b; line-height: 1.8; }

@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { ArrowRight, Ban, BookOpen, Check, ChevronRight, CircleHelp, ClipboardList, Clock3, FileBarChart2, LayoutDashboard, LoaderCircle, LogOut, Menu, Plus, RefreshCw, Settings2, ShieldCheck, Wallet, X } from 'lucide-react';
 import { api, errorMessage } from './api';
 import { Alert, Empty, FilterBar, Modal, MovementDetail, MovementTable } from './components';
@@ -22,7 +21,9 @@ const pages = [
 function Brand({ light = false }: { light?: boolean }) { return <div className={`brand ${light ? 'light' : ''}`}><span className="brand-mark"><Wallet size={23} strokeWidth={1.6} /></span><div><strong>cuentas<span>.</span></strong><small>GERENCIA</small></div></div>; }
 
 export default function App() {
-  const [clientId, setClientId] = useState('');
+  const [authConfigured, setAuthConfigured] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [authBusy, setAuthBusy] = useState(false);
@@ -31,16 +32,16 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    setInitializing(true); setConfigError(''); setAuthError('');
+    setInitializing(true); setAuthConfigured(false); setUser(null); setConfigError(''); setAuthError('');
     async function initialize() {
       try {
-        const config = await api<{ googleClientId: string }>('config');
-        if (!config.googleClientId?.trim()) throw new Error('El acceso con Google todavía no está configurado.');
+        const config = await api<{ authMode: 'password'; configured: boolean }>('config');
+        if (config.authMode !== 'password' || !config.configured) throw new Error('El acceso con usuario y contraseña todavía no está configurado.');
         if (cancelled) return;
-        setClientId(config.googleClientId);
+        setAuthConfigured(true);
         try { const session = await api<{ user: User | null }>('session'); if (!cancelled) setUser(session.user); }
         catch (cause) { if (!cancelled) setAuthError(errorMessage(cause)); }
-      } catch (cause) { if (!cancelled) { setClientId(''); setConfigError(errorMessage(cause)); } }
+      } catch (cause) { if (!cancelled) { setAuthConfigured(false); setConfigError(errorMessage(cause)); } }
       finally { if (!cancelled) setInitializing(false); }
     }
     void initialize();
@@ -51,20 +52,20 @@ export default function App() {
     window.addEventListener('session-expired', expired);
     return () => window.removeEventListener('session-expired', expired);
   }, []);
-  async function login(credential: string | undefined) {
-    if (!credential || authBusy) { if (!credential) setAuthError('Google no devolvió una credencial válida. Inténtalo nuevamente.'); return; }
+  async function login() {
+    if (!authConfigured || initializing || authBusy || !username || !password) return;
     setAuthBusy(true); setAuthError('');
-    try { const session = await api<{ user: User }>('login', { credential }); setUser(session.user); }
+    try { const session = await api<{ user: User }>('login', { username, password }); setPassword(''); setUser(session.user); }
     catch (cause) { setAuthError(errorMessage(cause)); }
     finally { setAuthBusy(false); }
   }
   async function logout() {
     await api('logout', {}); setUser(null);
   }
-  if (!initializing && user && clientId) return <Workspace user={user} onLogout={logout} />;
+  if (!initializing && user && authConfigured) return <Workspace key={user.username} user={user} onLogout={logout} />;
   return <div className="login-page"><section className="login-story"><Brand light /><div className="story-content"><span className="eyebrow">ADMINISTRACIÓN FINANCIERA</span><h1>Claridad en cada<br />cuenta.<br /><em>Control en cada<br />decisión.</em></h1><p>Un espacio de trabajo para gestionar fondos, registrar movimientos y dar seguimiento a los compromisos de gerencia.</p><div className="story-rule" /><div className="story-features"><span><BookOpen size={18} /> Registro ordenado</span><span><ShieldCheck size={18} /> Acceso autorizado</span><span><FileBarChart2 size={18} /> Reportes verificables</span></div></div><footer>CUENTAS / GERENCIA<span>Información real. Decisiones informadas.</span></footer><div className="story-decoration" aria-hidden="true"><span /><span /><span /></div></section>
-    <main className="login-main"><div className="login-top"><span>PLATAFORMA DE GESTIÓN</span><ShieldCheck size={19} /></div><div className="login-card"><span className="login-kicker">BIENVENIDO A TU ESPACIO</span><h2>Accede a tus cuentas</h2><p className="login-description">Inicia sesión con tu cuenta de Google autorizada por la organización.</p>
-      {initializing ? <div className="login-loading"><LoaderCircle className="spin" size={22} /> Verificando configuración y sesión...</div> : configError ? <><Alert>{configError}</Alert><div className="setup-guide"><h3>Configuración necesaria</h3><p>El administrador debe configurar en el servidor <code>GOOGLE_CLIENT_ID</code>, <code>ALLOWED_EMAILS</code>, <code>SESSION_SECRET</code>, <code>GAS_WEB_APP_URL</code> y <code>GAS_API_SECRET</code>.</p><p>Autoriza el origen de esta aplicación en Google OAuth. En desarrollo, ejecuta la API en el puerto 3001 y abre <code>http://localhost:5173</code>. No coloques secretos en variables <code>VITE_*</code>.</p></div><button className="button secondary" onClick={() => setRevision(revision + 1)}><RefreshCw size={16} /> Verificar de nuevo</button></> : <>{authError && <Alert>{authError}</Alert>}<div className={`google-login ${authBusy ? 'auth-busy' : ''}`}><GoogleOAuthProvider clientId={clientId}><GoogleLogin locale="es" theme="outline" size="large" shape="rectangular" text="signin_with" onSuccess={response => void login(response.credential)} onError={() => setAuthError('No se pudo iniciar sesión con Google. Inténtalo nuevamente.')} /></GoogleOAuthProvider></div>{authBusy && <p className="muted" role="status">Validando tu acceso...</p>}<div className="login-security"><ShieldCheck size={20} /><p>Solo las cuentas autorizadas pueden acceder. Tu sesión está protegida y los comprobantes permanecen privados.</p></div><button className="button text" onClick={() => setRevision(revision + 1)}><RefreshCw size={15} /> Volver a verificar sesión</button></>}
+    <main className="login-main"><div className="login-top"><span>PLATAFORMA DE GESTIÓN</span><ShieldCheck size={19} /></div><div className="login-card"><span className="login-kicker">BIENVENIDO A TU ESPACIO</span><h2>Accede a tus cuentas</h2><p className="login-description">Inicia sesión con el usuario y la contraseña autorizados por la organización.</p>
+      {initializing ? <div className="login-loading"><LoaderCircle className="spin" size={22} /> Verificando configuración y sesión...</div> : configError ? <><Alert>{configError}</Alert><div className="setup-guide"><h3>Configuración necesaria</h3><p>El administrador debe configurar en el servidor <code>APP_USERNAME</code>, <code>APP_PASSWORD</code> (entre 12 y 512 caracteres; usa una contraseña fuerte), <code>SESSION_SECRET</code> (al menos 32 caracteres), <code>GAS_WEB_APP_URL</code> y <code>GAS_API_SECRET</code>.</p><p>En desarrollo, ejecuta la API en el puerto 3001 y abre <code>http://localhost:5173</code>. No coloques credenciales ni secretos en variables <code>VITE_*</code> ni en el navegador. No hay acceso a datos privados hasta completar la configuración del servidor.</p></div><button className="button secondary" onClick={() => setRevision(revision + 1)}><RefreshCw size={16} /> Verificar de nuevo</button></> : <>{authError && <Alert>{authError}</Alert>}<form className="login-form" aria-label="Iniciar sesión" aria-busy={authBusy} onSubmit={event => { event.preventDefault(); void login(); }}><label>Usuario<input name="username" autoComplete="username" required maxLength={100} value={username} disabled={authBusy} onChange={event => setUsername(event.target.value)} /></label><label>Contraseña<input name="password" type="password" autoComplete="current-password" required maxLength={512} value={password} disabled={authBusy} onChange={event => setPassword(event.target.value)} /></label><button className="button" type="submit" disabled={authBusy || !username || !password}>{authBusy ? 'Validando tu acceso...' : 'Iniciar sesión'}</button></form>{authBusy && <p className="muted" role="status">Validando tu acceso...</p>}<div className="login-security"><ShieldCheck size={20} /><p>Solo los usuarios autorizados pueden acceder. Tu sesión está protegida y los comprobantes permanecen privados.</p></div><button className="button text" disabled={authBusy} onClick={() => setRevision(revision + 1)}><RefreshCw size={15} /> Volver a verificar sesión</button></>}
       <div className="login-help"><CircleHelp size={16} /><span>¿Necesitas acceso? Contacta al administrador de la organización.</span></div></div><footer>Un registro confiable, de principio a fin.<span>Valores en USD</span></footer></main></div>;
 }
 
@@ -86,7 +87,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => Promise<voi
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [logoutBusy, setLogoutBusy] = useState(false);
-  const draftKey = `gerencia-draft:${user.email}`;
+  const draftKey = `gerencia-draft:${user.username}`;
   const [draft, setDraft] = useState<MovementDraft | null>(() => restoreDraft(draftKey));
   const [formOpen, setFormOpen] = useState(false);
   const [formBusy, setFormBusy] = useState(false);
@@ -174,7 +175,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => Promise<voi
   const table = (rows: Movement[], isPending = false) => data && <MovementTable rows={rows} ledger={ledger} data={data} onView={setViewing} onEdit={openEdit} onVoid={m => { setVoiding(m); setVoidError(''); }} onPay={openPay} pending={isPending} />;
   return <div className="app-shell">
     {menuOpen && <button className="sidebar-scrim" aria-label="Cerrar navegación" onClick={() => setMenuOpen(false)} />}
-    <aside className={`sidebar ${menuOpen ? 'open' : ''}`}><div className="sidebar-brand"><Brand light /><button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div><div className="workspace-label">ESPACIO DE TRABAJO</div><nav aria-label="Navegación principal">{pages.map(item => <button key={item.id} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><item.icon size={19} /><span>{item.short}</span>{page === item.id && <ChevronRight size={14} />}</button>)}</nav><button className="sidebar-create" onClick={openCreate} disabled={!data || loading}><Plus size={18} />{draft ? 'Retomar borrador' : 'Registrar movimiento'}</button><div className="sidebar-bottom"><div className="sidebar-note"><ShieldCheck size={18} /><p>Gestión con respaldo.<span>Cada cambio deja un registro.</span></p></div><div className="user-card"><span className="user-avatar">{(user.name || user.email).slice(0, 1).toUpperCase()}</span><div><strong>{user.name || 'Usuario autorizado'}</strong><small title={user.email}>{user.email}</small></div><button className="icon-button" title="Cerrar sesión" aria-label="Cerrar sesión" disabled={logoutBusy || formBusy || voidBusy} onClick={() => void logout()}><LogOut size={18} /></button></div></div></aside>
+    <aside className={`sidebar ${menuOpen ? 'open' : ''}`}><div className="sidebar-brand"><Brand light /><button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Cerrar menú"><X size={20} /></button></div><div className="workspace-label">ESPACIO DE TRABAJO</div><nav aria-label="Navegación principal">{pages.map(item => <button key={item.id} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><item.icon size={19} /><span>{item.short}</span>{page === item.id && <ChevronRight size={14} />}</button>)}</nav><button className="sidebar-create" onClick={openCreate} disabled={!data || loading}><Plus size={18} />{draft ? 'Retomar borrador' : 'Registrar movimiento'}</button><div className="sidebar-bottom"><div className="sidebar-note"><ShieldCheck size={18} /><p>Gestión con respaldo.<span>Cada cambio deja un registro.</span></p></div><div className="user-card"><span className="user-avatar">{user.username.slice(0, 1).toUpperCase()}</span><div><strong>{user.name || user.username}</strong><small title={user.username}>{user.username}</small></div><button className="icon-button" title="Cerrar sesión" aria-label="Cerrar sesión" disabled={logoutBusy || formBusy || voidBusy} onClick={() => void logout()}><LogOut size={18} /></button></div></div></aside>
     <div className="app-content"><header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Abrir navegación"><Menu size={22} /></button><span>Gerencia</span><ChevronRight size={13} /><strong>{current.short}</strong></div><div className="topbar-right"><span className="today">{new Intl.DateTimeFormat('es-EC', { dateStyle: 'medium' }).format(new Date())}</span><span className="currency-tag">USD</span><button className="icon-button" onClick={() => void refresh()} disabled={loading || formBusy || voidBusy} title="Actualizar datos" aria-label="Actualizar datos"><RefreshCw size={17} className={loading ? 'spin' : ''} /></button></div></header>
       <main className="main-content"><div className="page-heading"><div><span className="eyebrow">CUENTAS / GERENCIA</span><h1>{current.title}</h1><p>{current.subtitle}</p></div>{page !== 'catalogs' && <button className="button" onClick={openCreate} disabled={!data || loading}><Plus size={17} />{draft ? 'Retomar borrador' : 'Nuevo movimiento'}</button>}</div>
         {loadError && <Alert>{loadError} {data ? 'Los datos visibles corresponden a la última carga correcta.' : ''}<button className="button text small" onClick={() => void refresh()} disabled={loading}>Reintentar</button></Alert>}

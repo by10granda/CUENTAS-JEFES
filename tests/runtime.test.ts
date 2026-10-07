@@ -27,7 +27,7 @@ test('compiled API runs in plain Node without TypeScript source files or a TS lo
       const req = {url:'/api/index?action=config',method:'GET',headers:{}};
       const res = {statusCode:0,setHeader(){},end(body){
         const value = JSON.parse(body);
-        if (this.statusCode !== 200 || !value.success || typeof value.data.googleClientId !== 'string') {
+        if (this.statusCode !== 200 || !value.success || value.data.authMode !== 'password' || typeof value.data.configured !== 'boolean' || Object.keys(value.data).length !== 2) {
           throw new Error('Unexpected config response: ' + body);
         }
         console.log('Compiled API config OK');

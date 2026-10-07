@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { allowedEmails, cookieToken, readSession, sessionCookie, sessionSecret, signSession, validOrigin, validateUpload } from './security.js';
+import { authenticate, authConfigured, cookieToken, readSession, sessionCookie, signSession, validOrigin, validateUpload } from './security.js';
 
 type Request = IncomingMessage & { body?: unknown };
 const READ = new Set(['bootstrap', 'movements', 'statistics']);
@@ -61,25 +61,16 @@ export async function handleRequest(req: Request, res: ServerResponse): Promise<
       throw new HttpError(405, 'Metodo no permitido');
     }
     if (isWrite && !validOrigin(req)) throw new HttpError(403, 'Origen no permitido');
-    if (action === 'config') return send(res, 200, { success: true, data: { googleClientId: process.env.GOOGLE_CLIENT_ID || '' } });
-    sessionSecret();
+    if (action === 'config') return send(res, 200, { success: true, data: { authMode: 'password', configured: authConfigured() } });
     if (action === 'logout') {
       res.setHeader('Set-Cookie', sessionCookie(req, '', true));
       return send(res, 200, { success: true, data: { user: null } });
     }
+    if (!authConfigured()) throw new HttpError(503, 'Configure APP_USERNAME, APP_PASSWORD (12 a 512 caracteres; use una contrasena fuerte) y SESSION_SECRET (al menos 32 caracteres) en Vercel.');
     if (action === 'login') {
       const payload = await body(req);
-      if (typeof payload.credential !== 'string' || !payload.credential || payload.credential.length > 16000) throw new HttpError(400, 'Credencial invalida');
-      if (!process.env.GOOGLE_CLIENT_ID || !allowedEmails().size) throw new Error('Google login is not configured');
-      const { OAuth2Client } = await import('google-auth-library');
-      let identity;
-      try {
-        const ticket = await new OAuth2Client(process.env.GOOGLE_CLIENT_ID).verifyIdToken({ idToken: payload.credential, audience: process.env.GOOGLE_CLIENT_ID });
-        identity = ticket.getPayload();
-      } catch { throw new HttpError(401, 'Credencial de Google invalida'); }
-      const email = identity?.email?.toLowerCase();
-      if (!email || !identity?.email_verified || !allowedEmails().has(email)) throw new HttpError(403, 'Correo no autorizado');
-      const user = { email, name: identity.name || email };
+      const user = authenticate(payload.username, payload.password);
+      if (!user) throw new HttpError(401, 'Usuario o contraseña incorrectos');
       res.setHeader('Set-Cookie', sessionCookie(req, signSession(user)));
       return send(res, 200, { success: true, data: { user } });
     }

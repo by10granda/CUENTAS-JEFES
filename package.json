@@ -14,9 +14,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-oauth/google": "^0.12.2",
     "dotenv": "^17.2.3",
-    "google-auth-library": "^10.5.0",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.577.0",

@@ -55,7 +55,7 @@ export interface Movement extends MovementInput {
   PAGADO_VINCULADO?: number;
   SALDO_PENDIENTE?: number;
 }
-export interface User { email: string; name: string }
+export interface User { username: string; name: string }
 export interface Filters {
   desde: string;
   hasta: string;

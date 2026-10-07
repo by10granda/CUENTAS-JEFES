@@ -2,22 +2,24 @@
 
 ## Runtime And Environment
 
-The frontend calls `/api/index?action=ACTION` on its own origin with cookies enabled. No Google Sheets or Drive secret belongs in a `VITE_*` variable. Dependencies owned by the main application: `google-auth-library`, `dotenv`, `tsx`, and development type definitions `@types/node`. Run the development API with `npx tsx server/dev.ts`; it loads the root `.env` and listens on `127.0.0.1:3001`.
+The frontend calls `/api/index?action=ACTION` on its own origin with cookies enabled. Shared password login requires no Gmail, OAuth client IDs, or Google Cloud configuration. Credentials and secrets belong only in private server environment variables, never Sheets, public config, or `VITE_*` variables. Financial data is stored solely in Sheets; private receipt files are in Drive. Run the development API with `npx tsx server/dev.ts`; it loads the root `.env` and listens on `127.0.0.1:3001`.
 
 | Node environment variable | Required | Value |
 | --- | --- | --- |
-| `GOOGLE_CLIENT_ID` | Login | Google OAuth web client ID used by React `GoogleOAuthProvider` / `GoogleLogin`. |
-| `ALLOWED_EMAILS` | Login | Comma-separated allowlist; whitespace is trimmed and emails are lowercased. Empty means no login allowed. |
+| `APP_USERNAME` | Login | Shared username, nonblank, at most 100 characters, no control characters. Exact comparison, no trimming or case normalization. |
+| `APP_PASSWORD` | Login | Strong shared password, 12 to 512 characters, not whitespace-only. Exact comparison. Rotation invalidates existing sessions. |
 | `SESSION_SECRET` | Session/private API | Random secret with at least 32 characters. Changing it invalidates existing sessions. |
 | `GAS_WEB_APP_URL` | Private API | `https://script.google.com/macros/s/DEPLOYMENT_ID/exec`. Use the deployed web app, not `/dev`. |
 | `GAS_API_SECRET` | Private API | Strong random shared secret; identical to the Apps Script property. |
-| `APP_ORIGIN` | Optional | Exact trusted application origin, e.g. `https://cuentas.example.com`. Same-host writes also work without this. |
+| `APP_ORIGIN` | Production configuration | `https://cuentas-jefes.vercel.app`. Same-host writes also work without this. Local `.env.example` retains `http://localhost:5173`. |
 | `NODE_ENV` | Production | Set to `production` outside local development. Production cookies are `Secure` and localhost dev origins are disabled. |
 | `PORT` | Optional | Development API port; default `3001`. |
 
 Configure the frontend-owned Vite proxy as `server.proxy['/api'] = { target: 'http://127.0.0.1:3001', changeOrigin: true }`. The only extra development Origin accepted is `http://localhost:5173`. `127.0.0.1:5173`, other ports and origin-less writes are not accepted. Run the frontend at `http://localhost:5173`. No CORS wildcard is provided; production frontend and API should share an origin.
 
 Vercel uses `api/index.ts` as the handler. The public aliases also have Vercel entry files: `/api/config`, `/api/session`, `/api/login`, `/api/logout`. No rewrite is needed for `/api/index?action=...`. The repository owner controls build configuration and package scripts; this backend does not create or change them.
+
+Configure these six variables privately in Vercel: `APP_USERNAME`, `APP_PASSWORD`, `SESSION_SECRET`, `GAS_WEB_APP_URL`, `GAS_API_SECRET`, and `APP_ORIGIN=https://cuentas-jefes.vercel.app`. The owner will configure shared credentials later; do not send passwords, secrets, or tokens through chat. Repository: https://github.com/by10granda/CUENTAS-JEFES, branch `main`. The public deployment exists, but the new password-login deployment is pending until changes are pushed and deployed; protected financial integration is not yet validated.
 
 ## Authentication And Envelope
 
@@ -31,13 +33,13 @@ Every response is JSON, disables caching, and has one of these shapes:
 { "success": false, "message": "Human-readable error" }
 ```
 
-HTTP status is meaningful: 400 validation, 401 unauthenticated, 403 disallowed email/origin, 404 unknown endpoint/record, 405 wrong method, 409 optimistic/idempotency conflict, 413 oversized request, 415 incorrect content type, 502 upstream failure, 503 storage busy/failure. Unexpected server configuration errors are 500 and do not expose secrets. Apps Script errors include an internal `status` field because ContentService itself does not set HTTP status; the Node proxy converts it to an HTTP status and strips that field from the response.
+HTTP status is meaningful: 400 validation, 401 unauthenticated/incorrect credentials, 403 disallowed origin, 404 unknown endpoint/record, 405 wrong method, 409 optimistic/idempotency conflict, 413 oversized request, 415 incorrect content type, 502 upstream failure, 503 unconfigured login or storage busy/failure. Unexpected server configuration errors are 500 and do not expose secrets. Apps Script errors include an internal `status` field because ContentService itself does not set HTTP status; the Node proxy converts it to an HTTP status and strips that field from the response.
 
 | Action | Method | Body / response data |
 | --- | --- | --- |
-| `config` | GET, public | `{googleClientId: string}` only. |
-| `session` | GET, public | `{user: null}` or `{user: {email, name}}`. |
-| `login` | POST, public | Body `{credential: string}` from `GoogleLogin` success. Data `{user: {email, name}}`. |
+| `config` | GET, public | `{authMode: 'password', configured: boolean}` only; no credentials or secrets. |
+| `session` | GET, public | `{user: null}` or `{user: {username, name}}`; 503 if login is unconfigured. |
+| `login` | POST, public | Body `{username: string, password: string}`. Data `{user: {username, name}}`; `name` is the shared username. Incorrect credentials return 401; unconfigured login returns 503. |
 | `logout` | POST, public | No body required. Data `{user: null}`. |
 | `bootstrap` | GET, authenticated | Catalog/bootstrap object below. |
 | `movements` | GET, authenticated | Full movement array, including void records, not filtered. |
@@ -48,7 +50,11 @@ HTTP status is meaningful: 400 validation, 401 unauthenticated, 403 disallowed e
 | `saveCatalog` | POST, authenticated | `{sheet: string, row: CatalogInput}`; data is committed row. |
 | `upload` | POST, authenticated | `{fileName, mimeType, base64}`; data `{fileId, url, fileName, mimeType, size}`. |
 
-Use `Content-Type: application/json` for JSON writes. The browser must send an exact allowed `Origin`, including login and logout. The session is an HMAC-SHA256 signed, HttpOnly, SameSite=Lax, eight-hour cookie named `gerencia_session`. Every authenticated request rechecks the current email allowlist. Google ID tokens are verified by `google-auth-library` for the configured audience; verified email and allowlist membership are required. Client-supplied user/email fields do not set the audit identity. All allowlisted users can manage catalogs; there is no invented separate administrator role.
+Use `Content-Type: application/json` for JSON writes. The browser must send an exact allowed `Origin`, including login and logout. The session is an HMAC-SHA256 signed, HttpOnly, SameSite=Lax, eight-hour cookie named `gerencia_session`, Secure in production. Every authenticated request rechecks the current username and a credential-version signature. Changing `APP_USERNAME`, `APP_PASSWORD`, or `SESSION_SECRET` invalidates previous sessions once the running server uses the new values. Unconfigured login makes `config.configured` false; `config` and `logout` remain available, while other actions return 503.
+
+The public application link is intentionally usable by anyone with the shared username/password. All such users can manage catalogs under one shared identity; there is no per-person attribution or separate administrator role. Client-supplied user/username fields do not set the audit identity. New audit entries use the authenticated shared username; historical audit emails and creator identities are preserved.
+
+No distributed brute-force lockout or application-level attempt limit is implemented. The public password endpoint allows repeated attempts; Origin validation does not prevent non-browser attackers. For real production, configure and verify Vercel firewall/rate limits covering both `/api/login` and `/api/index?action=login`, and use a strong random password. This is pending operational hardening, not a delivered protection.
 
 ## Bootstrap And Catalogs
 
@@ -117,7 +123,7 @@ For loans/advances, `DIRECCION` is mandatory and must be `Recibido` or `Entregad
 
 Balances are calculated from the explicit initial account balance plus cash incomes, reimbursements and received loans/advances, minus actual paid expenses, linked payments, withdrawals and delivered loans/advances. Transfers debit the source and credit the destination. Pending obligations have no cash outflow. No database, invented balance, account, or transaction is used.
 
-`ID`, `CREATED_AT`, `CREADO_POR`, `USUARIO_REGISTRO`, `CLAVE_IDEMPOTENCIA`, and `SOLICITUD_HASH` are immutable server fields. `USUARIO_REGISTRO` is the authenticated creator's email, not a client-supplied value; edits preserve that registration identity and record the editor in `ACTUALIZADO_POR` and the audit `USUARIO`. Older rows with an empty registration-user column use the previously authenticated `CREADO_POR`. Updates set `UPDATED_AT` and `ACTUALIZADO_POR` from the server. `UPDATED_AT` is an opaque optimistic-lock token; preserve it exactly, do not format or regenerate it. Updates and voids reject missing/stale tokens. Creates require a UUID idempotency key retained across network retries. The same user, key, and input returns the original committed record (including later edits/voids) without duplicate writes or audit entries; changed input or another user gets 409. Editing is done with `update`, not by reusing `create`.
+`ID`, `CREATED_AT`, `CREADO_POR`, `USUARIO_REGISTRO`, `CLAVE_IDEMPOTENCIA`, and `SOLICITUD_HASH` are immutable server fields. `USUARIO_REGISTRO` is the authenticated creator's shared username, not a client-supplied value; edits preserve that registration identity (including historical emails) and record the current username in `ACTUALIZADO_POR` and the audit `USUARIO`. Older rows with an empty registration-user column use the previously authenticated `CREADO_POR`. Updates set `UPDATED_AT` and `ACTUALIZADO_POR` from the server. `UPDATED_AT` is an opaque optimistic-lock token; preserve it exactly, do not format or regenerate it. Updates and voids reject missing/stale tokens. Creates require a UUID idempotency key retained across network retries. The same user, key, and input returns the original committed record (including later edits/voids) without duplicate writes or audit entries; changed input or another user gets 409. Editing is done with `update`, not by reusing `create`.
 
 ## Statistics
 
@@ -142,10 +148,12 @@ Send filters as query parameters, e.g. `/api/index?action=statistics&desde=2026-
 2. Set Script Properties `GAS_API_SECRET` and `DRIVE_FOLDER_ID`. The latter is an existing, private Drive folder owned by the execution account. No credentials were supplied with this implementation.
 3. Run `inspectStructure`, inspect the report, then run `setupSpreadsheet`. The spreadsheet ID is fixed to `1waRuU63wJjxNJP8usUtHkl5mV-WM7E099dz-4llwJrI`.
 4. Deploy a versioned web app executing as the owner, accessible to anyone so the Node server can reach it. Public `doGet` always returns unauthorized; `doPost` needs the constant-time-checked shared secret. After code changes, publish a new deployment version.
-5. Supply the deployment URL and matching shared secret to Node. Add the frontend origin to the Google OAuth client's authorized JavaScript origins, including `http://localhost:5173` in development.
+5. Supply the deployment URL and matching shared secret to Node, and configure the password-login variables and exact application origin privately. No Google Cloud or OAuth setup is required.
 6. Setup inserts the authorized jefes, categories and payment methods listed below. Create real accounts with explicitly approved balances through authenticated catalog operations; setup never creates accounts or financial data.
 
 Target sheets: `JEFES`, `CUENTAS`, `CATEGORIAS`, `FORMAS_PAGO`, `ESTADOS`, `MOVIMIENTOS`, `AUDITORIA`, `CONFIGURACION`. `Hoja1` and unrelated sheets are preserved. Before ANY setup change, every existing nonempty target must have all required headers, no unknown headers, and no duplicate headers. Otherwise setup refuses without changing any sheet. Compatible existing targets receive only missing optional headers at the end, including the newly added form fields and catalog `TIPO`; setup does not reorder columns, overwrite data, or migrate historical transactions. Empty targets receive full headers. Run `inspectStructure` and `setupSpreadsheet` again when upgrading an existing deployment to this schema.
+
+The password-login identity migration itself does not change this field schema and requires no setup rerun or reset when the schema is already current. Updating the remote script is mandatory: the old deployed `doPost` validates `request.user.email` and cannot accept the new `{username, name}` identity. The exact validation replacement and all five invocation replacements (`create`, `update`, `void`, `saveCatalog`, `upload`) are shown in the root README under **Actualizacion Obligatoria Del Script Existente**. Prefer loading the latest full `apps-script/Code.gs`, then edit the existing deployment and publish **Nueva version**, retaining the same `/exec` URL and Script Properties. Saving code alone does not update the deployed version. Public `/exec` GET is always unauthorized by design, even with a valid application session.
 
 Authorized seed catalogs:
 
@@ -156,16 +164,16 @@ Authorized seed catalogs:
 
 All newly seeded catalog rows are active. Setup inserts only missing names (trimmed/case-insensitive comparison), never overwrites an existing row's ID, type, active state, or other data, and falls back to a collision-checked UUID when the preferred ID is already occupied. It is repeatable and never seeds accounts, balances, movements, or audit transactions.
 
-Authenticated reads and writes take one ScriptLock so a request cannot read another request's half-completed mutation. Every successful catalog/movement write appends full before/after JSON and the authenticated email to `AUDITORIA`. Audit entries are append-only through the API. Writes and audit are committed together with snapshot-based best-effort rollback; a failed audit is NOT success. Sheets is not an ACID database: an execution termination or failed rollback can require manual reconciliation. Error messages flag failed restoration. Manual edits and unrelated scripts do not obey this application's lock or audit, so restrict spreadsheet editing accordingly.
+Authenticated reads and writes take one ScriptLock so a request cannot read another request's half-completed mutation. Every successful catalog/movement write appends full before/after JSON and the authenticated shared username to `AUDITORIA`; historical emails remain unchanged. Audit entries are append-only through the API. Writes and audit are committed together with snapshot-based best-effort rollback; a failed audit is NOT success. Sheets is not an ACID database: an execution termination or failed rollback can require manual reconciliation. Error messages flag failed restoration. Manual edits and unrelated scripts do not obey this application's lock or audit, so restrict spreadsheet editing accordingly.
 
 ## Private Receipts And Limits
 
 Upload accepts strict raw base64, NOT a data URL. Allowed MIME values: `image/jpeg`, `image/png`, `application/pdf`. Node AND GAS validate the decoded size (maximum 5 MiB), MIME and magic bytes. Magic checks identify the format signature, not antivirus or complete document validity. File names cannot contain control characters or path separators. Comprobante links must use the returned private Drive URL.
 
-Files are never published with an anyone link. Public/shared-link folders are rejected and each created file is explicitly set private. Upload is audited; a failed audit attempts to trash the new file. Allowlisting a login email does NOT grant Drive access. The Drive owner must explicitly share receipts or the private folder with intended viewers through Drive; the application never makes documents public automatically. Users without a Drive permission will see an access-denied/request-access page at the URL.
+Files are never published with an anyone link. Public/shared-link folders are rejected and each created file is explicitly set private. Upload is audited; a failed audit attempts to trash the new file. Shared application credentials do NOT grant Drive access. The Drive owner must explicitly share receipts or the private folder with intended viewers' Google accounts through Drive; the application never makes documents public automatically. Users without a Drive permission will see an access-denied/request-access page at the URL.
 
 The local handler accepts a 7 MiB JSON request, sufficient for a 5 MiB file as base64. Vercel imposes its own request/response limit (commonly 4.5 MB), which is smaller than that encoded payload and may produce a platform 413 before this handler runs. Large uploads require running this same proxy on a host with an adequate request limit, or a separately designed chunked-upload flow; chunked uploads are NOT silently claimed to be implemented. Large full movement responses also remain subject to host limits. The GAS call timeout is 55 seconds; the Vercel project's function duration must allow that. Retry creates with the same idempotency key after transport failures, never a fresh key.
 
 ## Verification
 
-With Node 24, run `node --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Older Node versions can use `npx tsx --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Tests use Node's test runner, a VM-hosted Apps Script runtime, mock Sheets/Drive, and local HTTP requests. No live Google OAuth credentials, Sheets deployment or Drive folder were available for integration testing.
+With Node 24, run `node --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Older Node versions can use `npx tsx --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Tests use Node's test runner, a VM-hosted Apps Script runtime, mock Sheets/Drive, and local HTTP requests. Latest agent-reported results: 38 unit/HTTP tests and 12 browser tests passed; the main agent will rerun final verification. This documentation-only edit does not certify another run. The existing Vercel public web/API was previously checked, but the new login deployment is pending push/deploy and live protected financial integration with Sheets/Drive has not been validated.

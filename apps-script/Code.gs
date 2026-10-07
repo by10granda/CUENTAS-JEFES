@@ -45,7 +45,7 @@ function doPost(e) {
     var request;
     try { request = JSON.parse(e.postData.contents); } catch (_) { fail_('JSON invalido'); }
     if (!request || !equalSecret_(request.secret, PropertiesService.getScriptProperties().getProperty('GAS_API_SECRET'))) fail_('No autorizado', 401);
-    if (!request.user || typeof request.user.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(request.user.email)) fail_('Usuario invalido', 401);
+    if (!request.user || typeof request.user.username !== 'string' || !request.user.username.trim() || request.user.username.length > 100 || /[\x00-\x1f\x7f-\x9f]/.test(request.user.username)) fail_('Usuario invalido', 401);
     var actions = ['bootstrap', 'movements', 'statistics', 'create', 'update', 'void', 'saveCatalog', 'upload'];
     if (actions.indexOf(request.action) < 0) fail_('Accion desconocida', 404);
     var payload = request.payload || {};
@@ -59,11 +59,11 @@ function doPost(e) {
       case 'bootstrap': data = bootstrap_(ss); break;
       case 'movements': data = enrichedMovements_(ss); break;
       case 'statistics': data = statistics_(ss, payload.filters || {}); break;
-      case 'create': data = create_(ss, payload, request.user.email); break;
-      case 'update': data = update_(ss, payload, request.user.email); break;
-      case 'void': data = void_(ss, payload, request.user.email); break;
-      case 'saveCatalog': data = saveCatalog_(ss, payload, request.user.email); break;
-      case 'upload': data = upload_(ss, payload, request.user.email); break;
+      case 'create': data = create_(ss, payload, request.user.username); break;
+      case 'update': data = update_(ss, payload, request.user.username); break;
+      case 'void': data = void_(ss, payload, request.user.username); break;
+      case 'saveCatalog': data = saveCatalog_(ss, payload, request.user.username); break;
+      case 'upload': data = upload_(ss, payload, request.user.username); break;
     }
     if (['create', 'update', 'void'].indexOf(request.action) >= 0) data = Object.assign({}, data, { FACTURA: data.NUMERO_FACTURA || '' });
     return json_({ success: true, data: data });

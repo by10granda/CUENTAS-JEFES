@@ -1,9 +1,9 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 
 export const COOKIE_NAME = 'gerencia_session';
 export const SESSION_SECONDS = 8 * 60 * 60;
-export type User = { email: string; name: string };
+export type User = { username: string; name: string };
 
 export function sessionSecret(): string {
   const secret = process.env.SESSION_SECRET || '';
@@ -11,17 +11,37 @@ export function sessionSecret(): string {
   return secret;
 }
 
-export function allowedEmails(): Set<string> {
-  return new Set((process.env.ALLOWED_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+export function authConfigured(): boolean {
+  const username = process.env.APP_USERNAME || '';
+  const password = process.env.APP_PASSWORD || '';
+  try { sessionSecret(); } catch { return false; }
+  return !!username.trim() && username.length <= 100 && !/[\x00-\x1f\x7f-\x9f]/.test(username) &&
+    password.length >= 12 && password.length <= 512 && !!password.trim();
+}
+
+export function authenticate(username: unknown, password: unknown): User | null {
+  if (!authConfigured() || typeof username !== 'string' || !username.trim() || username.length > 100 ||
+      /[\x00-\x1f\x7f-\x9f]/.test(username) || typeof password !== 'string' || !password || password.length > 512) return null;
+  // Raw credentials live only in server env; there is no password-hash database. Use a strong random password.
+  const digest = (value: string) => createHash('sha256').update(value).digest();
+  const usernameMatches = timingSafeEqual(digest(username), digest(process.env.APP_USERNAME!));
+  const passwordMatches = timingSafeEqual(digest(password), digest(process.env.APP_PASSWORD!));
+  return usernameMatches && passwordMatches ? { username, name: username } : null;
+}
+
+function authVersion(): string {
+  return createHmac('sha256', sessionSecret()).update(JSON.stringify([process.env.APP_USERNAME, process.env.APP_PASSWORD])).digest('base64url');
 }
 
 export function signSession(user: User, now = Date.now()): string {
-  const payload = Buffer.from(JSON.stringify({ ...user, exp: Math.floor(now / 1000) + SESSION_SECONDS })).toString('base64url');
+  sessionSecret();
+  if (!authConfigured() || user.username !== process.env.APP_USERNAME) throw new Error('Password login is not configured or user is invalid');
+  const payload = Buffer.from(JSON.stringify({ username: user.username, name: user.name, exp: Math.floor(now / 1000) + SESSION_SECONDS, authVersion: authVersion() })).toString('base64url');
   return `${payload}.${createHmac('sha256', sessionSecret()).update(payload).digest('base64url')}`;
 }
 
 export function readSession(token: string | undefined, now = Date.now()): User | null {
-  if (!token || token.length > 4096) return null;
+  if (!authConfigured() || !token || token.length > 4096) return null;
   const parts = token.split('.');
   if (parts.length !== 2) return null;
   const expected = createHmac('sha256', sessionSecret()).update(parts[0]).digest();
@@ -30,8 +50,12 @@ export function readSession(token: string | undefined, now = Date.now()): User |
   try {
     const value = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
     if (!Number.isSafeInteger(value.exp) || value.exp <= Math.floor(now / 1000) ||
-        typeof value.email !== 'string' || typeof value.name !== 'string' || !allowedEmails().has(value.email)) return null;
-    return { email: value.email, name: value.name };
+        typeof value.username !== 'string' || typeof value.name !== 'string' || value.username !== process.env.APP_USERNAME ||
+        typeof value.authVersion !== 'string') return null;
+    const version = Buffer.from(value.authVersion, 'base64url');
+    const current = Buffer.from(authVersion(), 'base64url');
+    if (version.length !== current.length || !timingSafeEqual(version, current)) return null;
+    return { username: value.username, name: value.name };
   } catch { return null; }
 }
 

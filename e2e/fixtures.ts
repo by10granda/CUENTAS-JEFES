@@ -1,5 +1,8 @@
 import { test as base, expect, type Page } from '@playwright/test';
-import type { AccountRow, Bootstrap, CatalogRow, Movement, MovementInput } from '../src/types';
+import type { AccountRow, Bootstrap, CatalogRow, Movement, MovementInput, User } from '../src/types';
+
+export const testUser: User = { username: 'browser-test', name: 'Usuario de prueba' };
+export const testPassword = 'test-only-password-123';
 
 const timestamp = '2026-10-07T12:00:00.000Z';
 const rows = (names: string[], prefix: string): CatalogRow[] => names.map((NOMBRE, index) => ({
@@ -28,7 +31,7 @@ export function normalizedMovement(input: MovementInput, ID: string): Movement {
   return {
     ...input, ID, SUBTOTAL: Math.round(input.CANTIDAD * input.VALOR_UNITARIO * 100) / 100,
     NUMERO_FACTURA: input.FACTURA || '', UPDATED_AT: timestamp, CREATED_AT: timestamp,
-    CREADO_POR: 'browser-test@example.invalid', USUARIO_REGISTRO: 'browser-test@example.invalid',
+    CREADO_POR: testUser.username, USUARIO_REGISTRO: testUser.username,
   };
 }
 
@@ -48,6 +51,9 @@ export function accountingFixtures(): Movement[] {
 
 interface MockState {
   configMissing: boolean;
+  user: User | null;
+  logins: { username: string; password: string }[];
+  actions: string[];
   bootstrap: Bootstrap;
   movements: Movement[];
   creates: MovementInput[];
@@ -59,7 +65,7 @@ interface MockState {
 export const test = base.extend<{ mock: MockState }>({
   mock: async ({ page }, use) => {
     const state: MockState = {
-      configMissing: false, bootstrap: emptyBootstrap(), movements: [], creates: [],
+      configMissing: false, user: testUser, logins: [], actions: [], bootstrap: emptyBootstrap(), movements: [], creates: [],
       catalogWrites: [], failNextCreate: false, unexpected: [],
     };
     await page.route('**/*', async route => {
@@ -76,10 +82,32 @@ export const test = base.extend<{ mock: MockState }>({
       }
       if (!url.pathname.startsWith('/api/')) { await route.continue(); return; }
       const action = url.searchParams.get('action');
+      const reads = ['config', 'session', 'bootstrap', 'movements'];
+      const writes = ['login', 'logout', 'saveCatalog', 'create'];
+      if (!action || ![...reads, ...writes].includes(action) || request.method() !== (writes.includes(action) ? 'POST' : 'GET')) {
+        state.unexpected.push(`API ${request.method()} ${request.url()}`); await route.abort(); return;
+      }
+      state.actions.push(action);
+      if (state.configMissing && !['config', 'logout'].includes(action)) {
+        await route.fulfill({ status: 503, json: { success: false, message: 'Configuracion incompleta' } }); return;
+      }
+      if (!state.user && !['config', 'session', 'login', 'logout'].includes(action)) {
+        await route.fulfill({ status: 401, json: { success: false, message: 'Inicie sesion para continuar' } }); return;
+      }
       let data: unknown;
       switch (action) {
-        case 'config': data = { googleClientId: state.configMissing ? '' : 'test-public-client.apps.googleusercontent.com' }; break;
-        case 'session': data = { user: { name: 'Usuario de prueba', email: 'browser-test@example.invalid' } }; break;
+        case 'config': data = { authMode: 'password', configured: !state.configMissing }; break;
+        case 'session': data = { user: state.user }; break;
+        case 'login': {
+          const body = request.postDataJSON();
+          state.logins.push(body);
+          if (body.username !== testUser.username || body.password !== testPassword) {
+            await route.fulfill({ status: 401, json: { success: false, message: 'Usuario o contraseña incorrectos' } }); return;
+          }
+          state.user = testUser;
+          data = { user: state.user }; break;
+        }
+        case 'logout': state.user = null; data = { user: null }; break;
         case 'bootstrap': data = state.bootstrap; break;
         case 'movements': data = state.movements; break;
         case 'saveCatalog': {

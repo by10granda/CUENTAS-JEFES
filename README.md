@@ -4,7 +4,7 @@ Aplicacion administrativa para Franco Becerra y Josselyn Becerra. React 19 + Typ
 
 ## Estado De La Entrega
 
-Frontend, servidor, script y pruebas implementados. La conexion real NO esta activada ni verificada: el propietario debe autorizar Apps Script, desplegarlo y configurar OAuth y las variables privadas. Sin esa configuracion el sistema deniega el acceso y muestra instrucciones, nunca datos financieros de ejemplo.
+Frontend, servidor, script y pruebas implementados. Existe el despliegue publico https://cuentas-jefes.vercel.app y se comprobaron previamente la web y la API publica. La nueva version con login por usuario y contrasena esta pendiente de desplegar hasta enviar los cambios a `main`. La integracion financiera protegida con Sheets/Drive NO esta validada en vivo: el propietario debe actualizar y republicar Apps Script y configurar las variables privadas. Sin configuracion de acceso el sistema deniega el acceso y muestra instrucciones, nunca datos financieros de ejemplo.
 
 Se reviso el documento por lectura: la hoja predeterminada no devolvio filas ni encabezados. El propietario confirmo que solo existe una hoja y autorizo crear la estructura. No se ha escrito en el documento remoto.
 
@@ -18,7 +18,7 @@ Se reviso el documento por lectura: la hoja predeterminada no devolvio filas ni 
 - Descarga real de Excel con fechas/importes numericos y PDF horizontal paginado con totales contables.
 - Comprobantes privados en Drive; solo la URL se almacena en Sheets.
 - Catalogos editables, bloqueo optimista, idempotencia de creacion, auditoria de valores anteriores y posteriores.
-- Formulario conservado en memoria y sessionStorage del navegador, separado por correo. No es una base de datos ni un modo offline. No almacena una copia local del libro financiero.
+- Formulario conservado en memoria y sessionStorage del navegador, separado por username. No es una base de datos ni un modo offline. No almacena una copia local del libro financiero.
 
 ## Arquitectura Y Seguridad
 
@@ -29,9 +29,13 @@ Navegador React
     -> Google Sheets / Drive
 ```
 
-La capa Node es necesaria para un frontend independiente sin exponer secretos y para evitar el problema de CORS de Apps Script. La API comprueba el ID token de Google y limita el acceso a `ALLOWED_EMAILS`. Usa cookie HttpOnly, SameSite=Lax, Secure en produccion, de ocho horas. Revalida la lista de correos en cada solicitud y valida Origin en escrituras. El correo auditado procede de la sesion verificada, no de un campo editable del formulario.
+La capa Node es necesaria para un frontend independiente sin exponer secretos y para evitar el problema de CORS de Apps Script. El enlace de la aplicacion es publico: cualquier persona con el usuario y la contrasena compartidos, que el propietario configurara posteriormente, puede iniciar sesion. Este es el acceso previsto para la asignacion; no requiere Gmail, OAuth ni Google Cloud. La API valida `APP_USERNAME` y `APP_PASSWORD` del servidor y entrega una cookie firmada de ocho horas, HttpOnly, SameSite=Lax y Secure en produccion. La sesion devuelve `{username, name}` y se revalida en cada solicitud; cambiar usuario, contrasena o `SESSION_SECRET` invalida las sesiones anteriores. Las escrituras validan Origin.
 
-El ID del cliente OAuth es publico por diseno; no es una clave privada. Todos los otros secretos se mantienen en `.env` o variables del servidor. No uses prefijos `VITE_` para secretos. No publiques `.env` en Git. Todos los correos autorizados pueden administrar los catalogos; no hay roles adicionales.
+El username auditado procede de la sesion verificada, no del formulario. Todos los usuarios de estas credenciales comparten la misma identidad y pueden administrar catalogos; no hay roles ni atribucion por persona. Las nuevas auditorias usan el username compartido; se conservan los correos de registros y auditorias historicos, sin reescribirlos.
+
+La contrasena y los secretos viven exclusivamente en `.env` local o variables privadas del servidor, nunca en Sheets ni en el bundle/configuracion publica del frontend. Los datos financieros se almacenan exclusivamente en Sheets; Drive conserva los comprobantes privados. No uses prefijos `VITE_` para secretos ni publiques `.env` en Git. `/api/config` solo publica `{authMode: "password", configured: true/false}`, sin usuario, contrasena ni secretos.
+
+No hay bloqueo distribuido ni limite de intentos de contrasena implementado. El endpoint publico de login permite intentos repetidos sin limite propio; validar Origin no impide ataques desde clientes externos. Para produccion real, configura y verifica reglas de firewall/rate limiting en Vercel para `/api/login` y `/api/index?action=login`, y utiliza una contrasena aleatoria fuerte. Esta proteccion es una recomendacion pendiente, no una capacidad ya implementada.
 
 IMPORTANTE: el Spreadsheet suministrado era legible sin iniciar sesion. Antes de guardar finanzas reales, cambia **Compartir > Acceso general > Restringido** y conserva unicamente los permisos de quienes lo necesiten. La autenticacion de la aplicacion no protege un documento que siga siendo publico por separado.
 
@@ -62,25 +66,59 @@ La estructura conserva los datos funcionales solicitados. Nombres canonicos usad
 
 El secreto del script y `GAS_API_SECRET` de Node deben ser identicos. No se necesitan service accounts ni claves privadas de Google.
 
-## 3. Configurar El Acceso Con Gmail
+### Actualizacion Obligatoria Del Script Existente
 
-1. En https://console.cloud.google.com/ crea o selecciona un proyecto.
-2. Configura **Google Auth Platform** / pantalla de consentimiento. Para Gmail personal utiliza audiencia **Externa**. Si esta en modo prueba, agrega el Gmail del secretario como usuario de prueba. Configura nombre de la app y correos de soporte que realmente correspondan.
-3. Crea un cliente OAuth de tipo **Aplicacion web**.
-4. Agrega como origen JavaScript autorizado `http://localhost:5173`. Para produccion agrega el origen exacto `https://TU-PROYECTO.vercel.app` o tu dominio real, sin rutas ni barra final. Esta integracion utiliza Google Identity Services con ID token, no una ruta de callback propia.
-5. Coloca el **ID del cliente** en `GOOGLE_CLIENT_ID` del servidor. El secreto del cliente OAuth no se utiliza en esta integracion y no debe ponerse en el frontend.
-6. Coloca el Gmail real autorizado en `ALLOWED_EMAILS`. Para varios usuarios, separa los correos con comas. Una lista vacia deniega todos los accesos.
+El `Code.gs` remoto anterior espera `request.user.email` y rechazara la nueva identidad `{username, name}` hasta actualizar su version desplegada. En `doPost`, los dos cambios son:
+
+1. Sustituye exactamente la validacion de email por la de username:
+
+```diff
+-    if (!request.user || typeof request.user.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(request.user.email)) fail_('Usuario invalido', 401);
++    if (!request.user || typeof request.user.username !== 'string' || !request.user.username.trim() || request.user.username.length > 100 || /[\x00-\x1f\x7f-\x9f]/.test(request.user.username)) fail_('Usuario invalido', 401);
+```
+
+2. Sustituye `request.user.email` por `request.user.username` en las cinco invocaciones:
+
+```diff
+-      case 'create': data = create_(ss, payload, request.user.email); break;
++      case 'create': data = create_(ss, payload, request.user.username); break;
+-      case 'update': data = update_(ss, payload, request.user.email); break;
++      case 'update': data = update_(ss, payload, request.user.username); break;
+-      case 'void': data = void_(ss, payload, request.user.email); break;
++      case 'void': data = void_(ss, payload, request.user.username); break;
+-      case 'saveCatalog': data = saveCatalog_(ss, payload, request.user.email); break;
++      case 'saveCatalog': data = saveCatalog_(ss, payload, request.user.username); break;
+-      case 'upload': data = upload_(ss, payload, request.user.email); break;
++      case 'upload': data = upload_(ss, payload, request.user.username); break;
+```
+
+Se recomienda cargar el archivo completo mas reciente `apps-script/Code.gs` en el proyecto existente y usar **Implementar > Gestionar implementaciones > Editar > Nueva version > Implementar**. Conserva la misma URL `/exec` y las propiedades privadas. Guardar el editor no actualiza la version publicada. Esta migracion de identidad mantiene el esquema de campos: si ya esta actualizado, no requiere repetir `setupSpreadsheet`, reinicializar ni borrar datos. GET publico a `/exec` siempre devuelve `No autorizado`; es el comportamiento previsto, no una prueba fallida de conexion.
+
+## 3. Configurar El Acceso Compartido En Vercel
+
+En el proyecto Vercel configura estas seis variables para Production, directamente en su panel privado. No envies contrasenas, secretos ni tokens por chat.
+
+| Variable | Valor |
+| --- | --- |
+| `APP_USERNAME` | Usuario compartido no vacio, hasta 100 caracteres, sin caracteres de control |
+| `APP_PASSWORD` | Contrasena fuerte compartida de 12 a 512 caracteres, no solo espacios |
+| `SESSION_SECRET` | Secreto aleatorio independiente de al menos 32 caracteres |
+| `GAS_WEB_APP_URL` | URL `/exec` de la implementacion actualizada de Apps Script |
+| `GAS_API_SECRET` | Mismo secreto privado configurado en Apps Script |
+| `APP_ORIGIN` | `https://cuentas-jefes.vercel.app` |
+
+Usuario y contrasena se comparan exactamente, sin normalizar mayusculas ni espacios. Configura las credenciales posteriormente y compartelas solo por un canal privado con quienes deban acceder. No se necesitan cliente OAuth, IDs de Google ni configuracion de Google Cloud; solo la autorizacion de Sheets/Drive por la cuenta propietaria del script.
 
 ## 4. Probar Localmente
 
 Requisito: Node 22.12 o superior. Dependencias instaladas y bloqueo de versiones en `package-lock.json`.
 
-Crea `.env` a partir de la plantilla `.env.example` y completa estos valores exclusivamente en el servidor:
+Crea `.env` a partir de la plantilla `.env.example` y completa estos valores exclusivamente en el servidor. La plantilla conserva el origen local, no el de produccion:
 
 | Variable | Valor |
 | --- | --- |
-| `GOOGLE_CLIENT_ID` | ID del cliente OAuth web |
-| `ALLOWED_EMAILS` | Gmail real del secretario |
+| `APP_USERNAME` | Usuario compartido, hasta 100 caracteres |
+| `APP_PASSWORD` | Contrasena fuerte de 12 a 512 caracteres |
 | `SESSION_SECRET` | Secreto aleatorio de al menos 32 caracteres |
 | `GAS_WEB_APP_URL` | URL `/exec` de Apps Script |
 | `GAS_API_SECRET` | Mismo secreto configurado en Apps Script |
@@ -98,13 +136,13 @@ npm install
 npm run dev
 ```
 
-Abre **http://localhost:5173**. `npm run dev` inicia Vite y la API en el puerto 3001. Como alternativa, ejecuta `npm run dev:api` y `npm run dev:web` en dos terminales. Usa `localhost`, no `127.0.0.1`, en el navegador porque el origen OAuth/CSRF debe coincidir. Reinicia la API al cambiar `.env`.
+Abre **http://localhost:5173**. `npm run dev` inicia Vite y la API en el puerto 3001. Como alternativa, ejecuta `npm run dev:api` y `npm run dev:web` en dos terminales. Usa `localhost`, no `127.0.0.1`, en el navegador porque el origen de las escrituras debe coincidir. Reinicia la API al cambiar `.env`.
 
 `npm run preview` solo sirve el bundle, no inicia la API ni sustituye la prueba local conectada.
 
 ## 5. Probar Un Registro Real
 
-1. Inicia sesion con el Gmail autorizado. Deben aparecer Franco y Josselyn y los catalogos iniciales desde Sheets.
+1. Inicia sesion con el usuario y la contrasena compartidos. Deben aparecer Franco y Josselyn y los catalogos iniciales desde Sheets, una vez actualizado y republicado el script.
 2. En **Configuracion > Cuentas**, crea una cuenta real, selecciona su jefe y especifica expresamente el saldo inicial real. Si no existen fondos iniciales y asi corresponde, ingresa cero. No registres el mismo fondo otra vez como ingreso.
 3. En **Nuevo movimiento**, selecciona jefe, cuenta, fecha, hora, tipo, categoria, forma de pago y descripcion. Ingresa una operacion real autorizada y su precio final con IVA incluido.
 4. Comprueba el subtotal y el total. Si corresponde, activa total manual. No se suma IVA.
@@ -126,17 +164,17 @@ Si deseas usar un dato ficticio de prueba, hazlo SOLO en un Spreadsheet de prueb
 
 ## 7. Publicar Con Git Y Vercel
 
-El proyecto no se ha inicializado, enviado ni publicado en Git automaticamente. Revisa los archivos antes de crear tu repositorio; `.gitignore` excluye secretos, dependencias y resultados de pruebas.
+Repositorio existente: https://github.com/by10granda/CUENTAS-JEFES, rama `main`. Despliegue existente: https://cuentas-jefes.vercel.app. `.gitignore` excluye secretos, dependencias y resultados de pruebas. La nueva version de autenticacion aun debe enviarse a `main` y desplegarse; no se afirma que el despliegue actual ya la incluya.
 
-1. Importa tu repositorio Git en Vercel. Framework Vite; Build `npm run build`; salida `dist`. `vercel.json` contiene la configuracion.
+1. Comprueba la vinculacion del repositorio y la rama `main` en Vercel. Framework Vite; Build `npm run build`; salida `dist`. `vercel.json` contiene la configuracion.
 2. Selecciona Node 22 o superior. Las rutas `api/*.ts` se despliegan como funciones Node.
-3. Configura las cinco variables privadas de la tabla y `APP_ORIGIN` con el origen HTTPS real. En produccion `NODE_ENV` debe ser `production` (Vercel lo establece normalmente).
-4. Autoriza ese mismo origen en Google OAuth.
-5. Despliega o vuelve a desplegar tras modificar las variables. Comprueba la sesion y repite la prueba de consulta/registro.
+3. Configura las seis variables de la seccion 3. En produccion `NODE_ENV` debe ser `production` (Vercel lo establece normalmente).
+4. Actualiza y republica Apps Script como **Nueva version** antes de probar la nueva identidad de usuario.
+5. Envia los cambios a `main` y despliega; vuelve a desplegar tras modificar variables. Comprueba login, sesion, rotacion de contrasena y consultas/escrituras protegidas. Estas pruebas financieras en vivo siguen pendientes.
 
 **No debes colocar la URL de Apps Script en el JavaScript del frontend.** Va en `GAS_WEB_APP_URL` de Vercel/`.env`. El navegador utiliza exclusivamente `/api/index` del mismo dominio. Tampoco hay tokens de acceso secretos en el cliente.
 
-Cada dominio de preview tiene su propio origen y necesitaria autorizacion OAuth; utiliza un dominio estable para las pruebas conectadas. No amplifiques permisos con comodines.
+Cada dominio de preview tiene su propio origen y configuracion de variables; utiliza un dominio estable para las pruebas conectadas y configura el origen exacto cuando corresponda. No amplifiques permisos con comodines.
 
 ## Reglas Contables
 
@@ -178,9 +216,9 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de datos y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, formulario, reintento tras recarga, pagos vinculados y archivos Excel/PDF reales. No equivale a una prueba de OAuth/Sheets/Drive en vivo.
+Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de API y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, login por contrasena, formulario, reintento tras recarga, pagos vinculados y archivos Excel/PDF reales. No equivale a una prueba de autenticacion/Sheets/Drive en vivo.
 
-Verificacion de esta entrega: build correcto; 34 pruebas unitarias/HTTP aprobadas; 10 pruebas de navegador aprobadas; `npm audit` sin vulnerabilidades reportadas. Se comprobo tambien el arranque conjunto local: frontend y API respondieron HTTP 200. No se verifico un despliegue real de Vercel o Google.
+Ultimos resultados reportados por los agentes de pruebas: 38 pruebas unitarias/HTTP y 12 pruebas de navegador aprobadas. El agente principal repetira la verificacion final; esta edicion documental no ejecuta ni certifica una nueva corrida. Las comprobaciones anteriores incluyeron build correcto, `npm audit` sin vulnerabilidades reportadas, arranque conjunto local HTTP 200 y web/API publica de Vercel. No validan la integracion financiera protegida en vivo ni el nuevo despliegue de login, pendiente hasta enviar los cambios.
 
 ## Archivos
 
@@ -201,4 +239,4 @@ Verificacion de esta entrega: build correcto; 34 pruebas unitarias/HTTP aprobada
 
 ## Que Falta Para Activar La Conexion Real
 
-El propietario debe proporcionar/configurar: Gmail autorizado, ID publico del cliente OAuth, URL `/exec`, secreto compartido y secreto de sesion en variables privadas, carpeta Drive y autorizacion de ejecucion. No compartas contrasenas, secretos o tokens por chat. Puedes comunicar la URL publica del despliegue y el ID publico de OAuth si necesitas ayuda; configura los secretos directamente en tu entorno.
+El propietario debe configurar posteriormente el usuario/contrasena compartidos y las otras variables privadas de la seccion 3, actualizar y republicar `Code.gs`, conservar/configurar la carpeta privada Drive y autorizar la ejecucion. Despues de enviar a `main` y desplegar, falta validar login y operaciones financieras protegidas con Sheets/Drive. Antes de produccion real, configura y verifica firewall/rate limiting de login. No compartas contrasenas, secretos o tokens por chat; configura los valores directamente en tu entorno o panel privado de Vercel. Para ayuda basta comunicar la URL publica de la aplicacion y errores sin secretos.

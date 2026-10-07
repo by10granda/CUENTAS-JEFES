@@ -67,7 +67,8 @@ function harness() {
     }
   });
   vm.runInContext(source, context, { filename: 'Code.gs' });
-  const call = (action, payload = {}, extra = {}) => JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ secret: 'shared-secret', action, payload, user: { email: 'allowed@example.com' }, ...extra }) } }));
+  // Synthetic test-only identity, not a deployment credential.
+  const call = (action, payload = {}, extra = {}) => JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ secret: 'shared-secret', action, payload, user: { username: 'test-only-user', name: 'Test Only' }, ...extra }) } }));
   const rows = name => JSON.parse(JSON.stringify(context.table_(ss, name).rows));
   const ready = () => {
     context.setupSpreadsheet();
@@ -123,6 +124,10 @@ test('GAS public reads denied, shared secret checked, unknown actions and lock c
   assert.equal(JSON.parse(h.context.doGet()).status, 401);
   assert.equal(h.call('bootstrap', {}, { secret: 'wrong' }).status, 401);
   assert.equal(h.call('bootstrap', {}, { user: null }).status, 401);
+  for (const username of ['', '   ', 123, 'x'.repeat(101), 'test\nuser', 'test\x7fuser', 'test\x85user']) {
+    assert.equal(h.call('bootstrap', {}, { user: { username, name: 'Test Only' } }).status, 401);
+  }
+  assert.equal(h.call('bootstrap', {}, { user: { email: 'legacy-test-only@example.com' } }).status, 401);
   assert.equal(h.call('evil').status, 404);
   h.context.setupSpreadsheet();
   h.rejectLock();
@@ -158,7 +163,7 @@ test('idempotency retries exactly once, conflicting payload/user rejected, audit
   assert.equal(h.call('create', { movement: input }).data.ID, created.ID);
   assert.equal(h.rows('MOVIMIENTOS').length, 1);
   assert.equal(h.call('create', { movement: { ...input, DESCRIPCION: 'different' } }).status, 409);
-  assert.equal(h.call('create', { movement: input }, { user: { email: 'other@example.com' } }).status, 409);
+  assert.equal(h.call('create', { movement: input }, { user: { username: 'other-test-only-user', name: 'Other Test Only' } }).status, 409);
   const beforeAudit = h.rows('AUDITORIA').at(-1);
   assert.equal(JSON.parse(beforeAudit.ANTES), null);
   assert.equal(JSON.parse(beforeAudit.DESPUES).ID, created.ID);
@@ -170,7 +175,7 @@ test('idempotency retries exactly once, conflicting payload/user rejected, audit
   const audit = h.rows('AUDITORIA').at(-1);
   assert.equal(JSON.parse(audit.ANTES).DESCRIPCION, 'Test');
   assert.equal(JSON.parse(audit.DESPUES).DESCRIPCION, 'Edited');
-  assert.equal(audit.USUARIO, 'allowed@example.com');
+  assert.equal(audit.USUARIO, 'test-only-user');
   assert.equal(h.call('update', { movement: created }).status, 409);
   assert.equal(h.call('void', { id: created.ID, updatedAt: created.UPDATED_AT }).status, 409);
   assert.equal(h.call('update', { movement: { ...updated.data, UPDATED_AT: undefined } }).status, 409);
@@ -380,18 +385,20 @@ test('full form text fields, computed subtotal and authenticated registration us
   assert.equal(created.OBSERVACIONES, 'Nota inicial\nSegunda linea');
   assert.equal(created.SUBTOTAL, 25);
   assert.equal(created.TOTAL, 20);
-  assert.equal(created.USUARIO_REGISTRO, 'allowed@example.com');
+   assert.equal(created.USUARIO_REGISTRO, 'test-only-user');
+   assert.equal(created.CREADO_POR, 'test-only-user');
   assert.equal(h.rows('MOVIMIENTOS')[0].SUBTOTAL, 25);
   assert.deepEqual(h.call('movements').data[0].NUMERO_FACTURA, 'INV-001');
   const updated = h.call('update', { movement: {
     ...created, SUBCATEGORIA: 'Cena', PROVEEDOR: 'Otro proveedor', NUMERO_FACTURA: 'INV-002', FACTURA: undefined,
     OBSERVACIONES: 'Nota editada', CANTIDAD: 3, SUBTOTAL: 999, USUARIO_REGISTRO: 'spoof-again@example.com'
-  } }, { user: { email: 'editor@example.com' } });
+  } }, { user: { username: 'test-only-editor', name: 'Test Only Editor' } });
   assert.equal(updated.success, true, updated.message);
   assert.equal(updated.data.SUBTOTAL, 37.50);
   assert.equal(updated.data.FACTURA, 'INV-002');
-  assert.equal(updated.data.USUARIO_REGISTRO, 'allowed@example.com');
-  assert.equal(updated.data.ACTUALIZADO_POR, 'editor@example.com');
+  assert.equal(updated.data.USUARIO_REGISTRO, 'test-only-user');
+  assert.equal(updated.data.CREADO_POR, 'test-only-user');
+  assert.equal(updated.data.ACTUALIZADO_POR, 'test-only-editor');
   const audit = h.rows('AUDITORIA').at(-1);
   const before = JSON.parse(audit.ANTES), after = JSON.parse(audit.DESPUES);
   for (const field of ['SUBCATEGORIA', 'PROVEEDOR', 'NUMERO_FACTURA', 'OBSERVACIONES', 'SUBTOTAL', 'USUARIO_REGISTRO']) {
@@ -399,7 +406,7 @@ test('full form text fields, computed subtotal and authenticated registration us
     assert.equal(after[field], updated.data[field]);
     assert.equal(h.call('movements').data[0][field], updated.data[field]);
   }
-  assert.equal(audit.USUARIO, 'editor@example.com');
+  assert.equal(audit.USUARIO, 'test-only-editor');
 });
 
 test('existing frontend FACTURA alias persists canonical invoice and omitted optional fields survive edits', () => {
@@ -417,6 +424,29 @@ test('existing frontend FACTURA alias persists canonical invoice and omitted opt
   const cleared = h.call('update', { movement: { ...updated, FACTURA: '', NUMERO_FACTURA: undefined, SUBCATEGORIA: '' } }).data;
   assert.equal(cleared.NUMERO_FACTURA, '');
   assert.equal(cleared.SUBCATEGORIA, '');
+});
+
+test('username-authenticated edits preserve historical email registration and existing audit identities', () => {
+  const h = harness(); const f = h.ready();
+  const created = h.call('create', { movement: f.movement() }).data;
+  const sheet = h.sheets.MOVIMIENTOS;
+  const headers = sheet.data[0];
+  const legacyIdentity = 'historical-test-only@example.com';
+  for (const field of ['CREADO_POR', 'USUARIO_REGISTRO', 'ACTUALIZADO_POR']) sheet.data[1][headers.indexOf(field)] = legacyIdentity;
+  const audits = h.sheets.AUDITORIA;
+  audits.data.at(-1)[audits.data[0].indexOf('USUARIO')] = legacyIdentity;
+  const oldAudits = h.rows('AUDITORIA');
+  h.context.setupSpreadsheet();
+  assert.deepEqual(h.rows('AUDITORIA'), oldAudits);
+  const loaded = h.call('movements').data[0];
+  const updated = h.call('update', { movement: { ...loaded, DESCRIPCION: 'Username edit' } });
+  assert.equal(updated.success, true, updated.message);
+  assert.equal(updated.data.ID, created.ID);
+  assert.equal(updated.data.CREADO_POR, legacyIdentity);
+  assert.equal(updated.data.USUARIO_REGISTRO, legacyIdentity);
+  assert.equal(updated.data.ACTUALIZADO_POR, 'test-only-user');
+  assert.deepEqual(h.rows('AUDITORIA').slice(0, -1), oldAudits);
+  assert.equal(h.rows('AUDITORIA').at(-1).USUARIO, 'test-only-user');
 });
 
 test('new form text validates lengths/types/control characters and participates in idempotency', () => {
@@ -492,9 +522,9 @@ test('upgrading the previous schema appends optional headers without rewriting f
   assert.deepEqual(h.rows('AUDITORIA'), oldAudits);
   const loaded = h.call('movements').data[0];
   assert.equal(loaded.SUBTOTAL, 40);
-  assert.equal(loaded.USUARIO_REGISTRO, 'allowed@example.com');
+  assert.equal(loaded.USUARIO_REGISTRO, 'test-only-user');
   const updated = h.call('update', { movement: { ...loaded, OBSERVACIONES: 'New notes after schema upgrade' } });
   assert.equal(updated.success, true, updated.message);
   assert.equal(updated.data.SUBTOTAL, 40);
-  assert.equal(updated.data.USUARIO_REGISTRO, 'allowed@example.com');
+  assert.equal(updated.data.USUARIO_REGISTRO, 'test-only-user');
 });

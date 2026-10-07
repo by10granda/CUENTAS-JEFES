@@ -1,16 +1,63 @@
 import { readFile } from 'node:fs/promises';
 import * as XLSX from 'xlsx';
-import { test, expect, navigate, noPageOverflow, testAccount, accountingFixtures } from './fixtures';
+import { test, expect, navigate, noPageOverflow, testAccount, accountingFixtures, testUser, testPassword } from './fixtures';
 
 test('missing login configuration shows setup warning and no financial workspace', async ({ page, mock }) => {
   mock.configMissing = true;
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Configuración necesaria' })).toBeVisible();
-  await expect(page.getByRole('alert')).toContainText('El acceso con Google todavía no está configurado.');
+  await expect(page.getByRole('alert')).toContainText('El acceso con usuario y contraseña todavía no está configurado.');
+  for (const variable of ['APP_USERNAME', 'APP_PASSWORD', 'SESSION_SECRET', 'GAS_WEB_APP_URL', 'GAS_API_SECRET']) {
+    await expect(page.locator('.setup-guide')).toContainText(variable);
+  }
+  await expect(page.locator('.setup-guide')).toContainText('entre 12 y 512 caracteres');
+  await expect(page.locator('.setup-guide')).toContainText('al menos 32 caracteres');
+  await expect(page.locator('.login-page')).not.toContainText(/Google|Gmail|OAuth|ALLOWED_EMAILS/);
+  await expect(page.getByRole('form', { name: 'Iniciar sesión' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Verificar de nuevo' })).toBeEnabled();
   await expect(page.getByRole('navigation')).toHaveCount(0);
   await expect(page.locator('.indicator, .movement-table')).toHaveCount(0);
   await noPageOverflow(page);
+  expect([...new Set(mock.actions)]).toEqual(['config']);
+});
+
+test('password login retains failed credentials, clears password on success and never stores it', async ({ page, mock }) => {
+  mock.user = null;
+  await page.goto('/');
+  const username = page.getByLabel('Usuario', { exact: true });
+  const password = page.getByLabel('Contraseña', { exact: true });
+  await expect(username).toHaveAttribute('autocomplete', 'username');
+  await expect(password).toHaveAttribute('autocomplete', 'current-password');
+  await expect(password).toHaveAttribute('type', 'password');
+  await expect(page.getByRole('navigation')).toHaveCount(0);
+  await username.fill(testUser.username);
+  await password.fill('wrong-test-password');
+  await page.getByRole('button', { name: 'Iniciar sesión', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('Usuario o contraseña incorrectos');
+  await expect(username).toHaveValue(testUser.username);
+  await expect(password).toHaveValue('wrong-test-password');
+  expect(mock.logins).toEqual([{ username: testUser.username, password: 'wrong-test-password' }]);
+  expect([...new Set(mock.actions)]).toEqual(['config', 'session', 'login']);
+  expect(await page.evaluate(() => ({ session: { ...sessionStorage }, local: { ...localStorage } }))).toEqual({ session: {}, local: {} });
+  await noPageOverflow(page);
+  await password.fill(testPassword);
+  await page.getByRole('button', { name: 'Iniciar sesión', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Resumen general' })).toBeVisible();
+  expect(mock.logins).toEqual([
+    { username: testUser.username, password: 'wrong-test-password' },
+    { username: testUser.username, password: testPassword },
+  ]);
+  await expect(page.locator('.user-card small')).toHaveText(testUser.username);
+  const openMenu = page.getByRole('button', { name: 'Abrir navegación', exact: true });
+  if (await openMenu.isVisible()) await openMenu.click();
+  await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).click();
+  await expect(username).toHaveValue(testUser.username);
+  await expect(password).toHaveValue('');
+  expect(mock.user).toBeNull();
+  expect(await page.evaluate(() => ({ session: { ...sessionStorage }, local: { ...localStorage } }))).toEqual({ session: {}, local: {} });
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Iniciar sesión', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation')).toHaveCount(0);
 });
 
 test('authenticated empty dashboard has approved catalogs and no seeded finance', async ({ page, mock }) => {
@@ -68,6 +115,7 @@ test('explicit zero-balance account and tax-inclusive movement survive failed sa
   await expect(dialog.getByRole('button', { name: 'Reintentar guardado' })).toBeEnabled();
   await noPageOverflow(page);
   await dialog.getByRole('button', { name: 'Cerrar y conservar' }).click();
+  expect(await page.evaluate(() => Object.keys(sessionStorage))).toEqual([`gerencia-draft:${testUser.username}`]);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Tus cuentas están listas' })).toBeVisible();
   await page.getByRole('button', { name: 'Retomar borrador', exact: true }).last().click();
