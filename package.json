@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && tsc -p tsconfig.server.json && vite build",
     "test": "tsx --test tests/*.test.ts tests/*.test.mjs",
     "test:e2e": "playwright test",
+    "manual:pdf": "node scripts/generate-manual.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

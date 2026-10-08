@@ -2,11 +2,19 @@
 
 Aplicacion administrativa para Franco Becerra y Josselyn Becerra. React 19 + TypeScript + Vite, API Node local/Vercel, Google Apps Script y Google Sheets. No utiliza una base de datos propia.
 
+## Manual De Usuario
+
+Guia completa de 16 secciones: [manual en linea](https://cuentas-jefes.vercel.app/manual-usuario.html) y [manual PDF](https://cuentas-jefes.vercel.app/manual-usuario.pdf). El enlace tambien aparece en la pagina de acceso y en el pie de la aplicacion. La fuente es `public/manual-usuario.html`; regenera su PDF con `npm run manual:pdf` despues de modificarla (requiere Chromium de Playwright).
+
+Se agregaron 20 movimientos ficticios autorizados, 10 por cada jefe, con `[DEMO]` en la descripcion y `DEMO-10-POR-JEFE-20261008` en observaciones. El movimiento preexistente permanece sin cambios. [Excel de demostracion](https://cuentas-jefes.vercel.app/movimientos-demo.xlsx) contiene solo esos 20 datos ficticios, nunca el registro original; es una instantanea, no una base de datos sincronizada.
+
+`scripts/seed-demo.mjs` es una utilidad administrativa de carga ficticia idempotente, no se ejecuta en el despliegue. No la ejecutes sin autorizacion: usa las credenciales privadas del proceso, nunca valores escritos en Git. `--export-only` regenera el Excel del lote sin crear movimientos. Para retirar su efecto de los totales, identifica el lote y anula primero sus pagos vinculados y luego sus originales; no alteres registros reales. El borrado fisico de pruebas requiere una decision administrativa posterior explicita.
+
 ## Estado De La Entrega
 
-Frontend, servidor, script y pruebas implementados. Existe el despliegue publico https://cuentas-jefes.vercel.app y se comprobaron previamente la web y la API publica. La version actual con login por usuario/contrasena, movimientos sin cuentas y comprobantes por URL esta pendiente de enviar a `main` y desplegar; no se afirma que ya este activa en publico. La integracion financiera protegida con Sheets NO esta validada en vivo: el propietario debe actualizar y republicar Apps Script y configurar las variables privadas. Sin configuracion de acceso el sistema deniega el acceso y muestra instrucciones, nunca datos financieros de ejemplo.
+Aplicacion desplegada en https://cuentas-jefes.vercel.app con acceso por usuario/contrasena, movimientos sin cuentas y comprobantes opcionales por URL. Se comprobaron el login, las consultas protegidas y la persistencia de 20 movimientos ficticios autorizados en Sheets, incluidos pagos vinculados y pagos parciales. Las credenciales se mantienen exclusivamente en variables privadas. La aplicacion no genera datos de ejemplo automaticamente al abrirla o desplegarla.
 
-Se reviso el documento por lectura: la hoja predeterminada no devolvio filas ni encabezados. El propietario confirmo que solo existe una hoja y autorizo crear la estructura. No se ha escrito en el documento remoto.
+La inspeccion inicial mostro una hoja predeterminada sin filas ni encabezados y el propietario autorizo crear la estructura. Posteriormente autorizo la carga del lote ficticio de 20 movimientos. El registro preexistente a ese lote se conservo sin cambios.
 
 ## Funciones
 
@@ -30,7 +38,7 @@ Navegador React
     -> Google Sheets
 ```
 
-La capa Node es necesaria para un frontend independiente sin exponer secretos y para evitar el problema de CORS de Apps Script. El enlace de la aplicacion es publico: cualquier persona con el usuario y la contrasena compartidos, que el propietario configurara posteriormente, puede iniciar sesion. Este es el acceso previsto para la asignacion; no requiere Gmail, OAuth ni Google Cloud. La API valida `APP_USERNAME` y `APP_PASSWORD` del servidor y entrega una cookie firmada de ocho horas, HttpOnly, SameSite=Lax y Secure en produccion. La sesion devuelve `{username, name}` y se revalida en cada solicitud; cambiar usuario, contrasena o `SESSION_SECRET` invalida las sesiones anteriores. Las escrituras validan Origin.
+La capa Node es necesaria para un frontend independiente sin exponer secretos y para evitar el problema de CORS de Apps Script. El enlace de la aplicacion es publico: cualquier persona con el usuario y la contrasena compartidos definidos por el propietario puede iniciar sesion. Este es el acceso previsto para la asignacion; no requiere Gmail, OAuth ni Google Cloud. La API valida `APP_USERNAME` y `APP_PASSWORD` del servidor y entrega una cookie firmada de ocho horas, HttpOnly, SameSite=Lax y Secure en produccion. La sesion devuelve `{username, name}` y se revalida en cada solicitud; cambiar usuario, contrasena o `SESSION_SECRET` invalida las sesiones anteriores. Las escrituras validan Origin.
 
 El username auditado procede de la sesion verificada, no del formulario. Todos los usuarios de estas credenciales comparten la misma identidad y pueden administrar catalogos; no hay roles ni atribucion por persona. Las nuevas auditorias usan el username compartido; se conservan los correos de registros y auditorias historicos, sin reescribirlos.
 
@@ -132,7 +140,7 @@ Abre **http://localhost:5173**. `npm run dev` inicia Vite y la API en el puerto 
 6. Verifica la fila en `MOVIMIENTOS`: ID unico, usuario de registro y timestamps. Verifica una entrada `CREAR` en `AUDITORIA`.
 7. Recarga el navegador. El movimiento debe seguir apareciendo porque se consulta Sheets, no una lista de demostracion.
 
-Si deseas usar un dato ficticio de prueba, hazlo SOLO en un Spreadsheet de pruebas independiente: cambia `SPREADSHEET_ID` en una copia del script y despliega otra Web App. No insertes fixtures de las pruebas automatizadas en el libro financiero real.
+Para finanzas reales, usa un Spreadsheet de pruebas separado para demostraciones. En esta entrega academica, el propietario autorizo expresamente los 20 registros `[DEMO]` en el documento conectado. No insertes las fixtures de las pruebas automatizadas ni mezcles demostraciones con operaciones reales sin una autorizacion explicita.
 
 ## 6. Probar Consultas Y Pagos
 
@@ -146,7 +154,7 @@ Si deseas usar un dato ficticio de prueba, hazlo SOLO en un Spreadsheet de prueb
 
 ## 7. Publicar Con Git Y Vercel
 
-Repositorio existente: https://github.com/by10granda/CUENTAS-JEFES, rama `main`. Despliegue existente: https://cuentas-jefes.vercel.app. `.gitignore` excluye secretos, dependencias y resultados de pruebas. El codigo actual de frontend/servidor aun debe enviarse a `main` y desplegarse; no se afirma que el despliegue actual ya lo incluya.
+Repositorio existente: https://github.com/by10granda/CUENTAS-JEFES, rama `main`. Despliegue existente: https://cuentas-jefes.vercel.app. `.gitignore` excluye secretos, dependencias y resultados de pruebas. Los cambios enviados a `main` generan un nuevo despliegue mediante la integracion con Vercel.
 
 1. Comprueba la vinculacion del repositorio y la rama `main` en Vercel. Framework Vite; Build `npm run build`; salida `dist`. `vercel.json` contiene la configuracion.
 2. Selecciona Node 22 o superior. Las rutas `api/*.ts` se despliegan como funciones Node.
@@ -206,7 +214,7 @@ npm run test:e2e
 
 Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de API y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, login por contrasena, movimientos sin cuentas, reintentos, pagos vinculados, filtros de inversion, comprobantes por URL, preservacion historica y archivos Excel/PDF reales. No equivale a una prueba de autenticacion/Sheets ni de acceso a comprobantes en vivo.
 
-Verificacion de esta version: build correcto, 44 pruebas unitarias/HTTP y 26 pruebas de navegador aprobadas. Se comprobo la lectura conectada del Apps Script actualizado y la restriccion de cuentas historicas de solo lectura. No se insertaron movimientos ficticios ni se modificaron los registros existentes.
+Verificacion de esta version: build correcto, 47 pruebas unitarias/HTTP y 26 pruebas de navegador aprobadas. Se comprobo la lectura conectada, el registro del lote ficticio autorizado y la restriccion de cuentas historicas de solo lectura. El registro preexistente no fue modificado. Las pruebas locales validan tambien el manual PDF y que el Excel publico contenga exclusivamente los 20 registros de demostracion.
 
 La API reintenta hasta tres veces las consultas cuando Google devuelve una respuesta temporal invalida o falla el transporte, dentro de un unico plazo de 55 segundos. No reintenta automaticamente escrituras ni errores de validacion del script. Si falla un guardado, conserva el borrador y su clave de idempotencia.
 
@@ -227,6 +235,6 @@ La API reintenta hasta tres veces las consultas cuando Google devuelve una respu
 | `.env.example`, `vercel.json`, `vite.config.ts` | Configuracion local y despliegue |
 | `scripts/dev.mjs`, `package.json`, `package-lock.json`, `tsconfig*.json` | Ejecucion, dependencias y compilacion |
 
-## Que Falta Para Activar La Conexion Real
+## Configuracion De Otra Instalacion
 
-El propietario debe configurar posteriormente el usuario/contrasena compartidos y las otras variables privadas de la seccion 3, actualizar `Code.gs` y el manifiesto, republicar **Nueva version** y autorizar Sheets. Conserva todas las tablas y datos; no crees cuentas para activar el registro. Despues de enviar a `main` y desplegar, falta validar login y operaciones financieras protegidas con Sheets. El acceso a comprobantes se controla por separado en Google, sin OAuth Drive de la app. Antes de produccion real, configura y verifica firewall/rate limiting de login. No compartas contrasenas, secretos o tokens por chat; configura los valores directamente en tu entorno o panel privado de Vercel. Para ayuda basta comunicar la URL publica de la aplicacion y errores sin secretos.
+Para otra instalacion, configura el usuario/contrasena y las variables privadas de la seccion 3, incorpora `Code.gs` y su manifiesto, publica una version y autoriza Sheets. La instalacion actual ya esta conectada; agregar el manual no exige actualizar Apps Script. Conserva las tablas y datos, y no crees cuentas para activar el registro. El acceso a comprobantes se controla por separado en Google. Antes de produccion real, cambia credenciales de demostracion y verifica firewall/rate limiting de login. No compartas contrasenas, secretos o tokens por chat; configura los valores en tu entorno o panel privado de Vercel.

@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Manual paso a paso de Cuentas / Gerencia: acceso, movimientos, obligaciones, reportes y configuracion.">
+  <title>Manual de usuario | Cuentas / Gerencia</title>
+  <style>
+    :root { color-scheme: light; --navy: #122b35; --teal: #19716b; --ink: #263e47; --muted: #536b73; --line: #d5e1e1; --paper: #fff; --wash: #f0f5f4; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 20px; }
+    body { margin: 0; background: var(--wash); color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    a { color: var(--teal); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    a:focus-visible, button:focus-visible { outline: 3px solid #ba8840; outline-offset: 4px; }
+    .skip { position: absolute; left: 12px; top: -80px; background: white; padding: 8px; }
+    .skip:focus { top: 12px; }
+    .cover { background: var(--navy); color: white; padding: 52px max(24px, calc((100vw - 1120px) / 2)); border-bottom: 6px solid var(--teal); }
+    .kicker { font-size: 12px; letter-spacing: .17em; text-transform: uppercase; font-weight: 700; }
+    h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.12; margin: 18px 0; letter-spacing: -.025em; }
+    .cover p { max-width: 760px; color: #d8e7e8; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+    .actions a, .actions button { font: inherit; font-weight: 600; border: 1px solid #8badaa; border-radius: 4px; padding: 10px 16px; color: white; background: transparent; text-decoration: none; cursor: pointer; }
+    .actions button { background: var(--teal); border-color: var(--teal); }
+    .layout { max-width: 1168px; margin: 0 auto; padding: 32px 24px 64px; display: grid; grid-template-columns: 235px minmax(0, 1fr); gap: 32px; align-items: start; }
+    nav { padding: 20px; background: white; border: 1px solid var(--line); border-top: 3px solid var(--teal); }
+    nav h2 { margin-top: 0; font-size: 18px; }
+    nav ol { padding-left: 23px; margin-bottom: 0; }
+    nav li { padding: 3px 0; font-size: 14px; }
+    main { min-width: 0; background: white; padding: 32px; border: 1px solid var(--line); }
+    section { margin-bottom: 42px; }
+    section:last-child { margin-bottom: 0; }
+    h2 { color: var(--navy); line-height: 1.25; font-size: 25px; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin: 0 0 20px; }
+    h2 .num { color: var(--teal); font-size: 15px; margin-right: 8px; }
+    h3 { font-size: 18px; line-height: 1.35; color: var(--navy); margin: 24px 0 10px; }
+    p { margin: 10px 0 14px; }
+    li { margin: 6px 0; }
+    ol, ul { padding-left: 24px; }
+    strong { color: var(--navy); }
+    .note { background: #edf5f3; border-left: 3px solid var(--teal); padding: 14px 18px; margin: 18px 0; }
+    .warning { background: #faf5eb; border-left-color: #ae7b2d; }
+    .note p:last-child { margin-bottom: 0; }
+    .note p:first-child { margin-top: 0; }
+    .table-wrap { max-width: 100%; overflow-x: auto; margin: 16px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; vertical-align: top; border: 1px solid var(--line); padding: 10px 12px; }
+    th { background: var(--navy); color: white; font-weight: 600; }
+    tbody tr:nth-child(even) { background: #f6f9f8; }
+    code { font: .9em/1.5 ui-monospace, Consolas, monospace; background: #edf2f2; padding: 2px 4px; overflow-wrap: anywhere; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .back { font-size: 13px; }
+    footer { color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; font-size: 13px; }
+    @media (max-width: 800px) { .layout { grid-template-columns: 1fr; gap: 20px; padding: 20px 16px 40px; } nav ol { columns: 2; column-gap: 25px; } nav li { break-inside: avoid; } main { padding: 24px; } }
+    @media (max-width: 480px) { .cover { padding: 32px 20px; } main { padding: 20px 16px; } nav ol { columns: 1; } h2 { font-size: 23px; } th, td { padding: 8px; } }
+    @media print {
+      @page { size: A4; margin: 18mm 15mm 20mm; }
+      html { scroll-behavior: auto; } body { background: white; font: 10pt/1.45 Arial, sans-serif; color: #263e47; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .cover { padding: 22px 24px; } h1 { font-size: 30pt; } .cover p { color: #d8e7e8; }
+      .actions, .skip, .back { display: none; } .layout { display: block; padding: 0; max-width: none; }
+      nav { margin: 20px 0; padding: 14px 18px; break-inside: avoid; } nav ol { columns: 2; } nav li { font-size: 9pt; break-inside: avoid; }
+      main { border: 0; padding: 0; } section { margin-bottom: 24px; } h2 { font-size: 17pt; margin-top: 22px; } h3 { font-size: 12pt; }
+      h2, h3 { break-after: avoid; } p, li { orphans: 3; widows: 3; } .note, tr { break-inside: avoid; }
+      .table-wrap { overflow: visible; } table { font-size: 9pt; table-layout: fixed; } th, td { padding: 7px; overflow-wrap: anywhere; } thead { display: table-header-group; }
+      a { color: var(--teal); } code { font-size: 8.5pt; } footer { font-size: 9pt; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <header class="cover" id="inicio">
+    <div class="kicker">Cuentas / Gerencia &middot; Gu&iacute;a operativa</div>
+    <h1>Manual de usuario</h1>
+    <p>Instrucciones paso a paso para registrar operaciones, consultar la inversi&oacute;n, liquidar pendientes y obtener reportes. Valores en USD; precios con IVA incluido.</p>
+    <p>Aplicaci&oacute;n de producci&oacute;n: <a style="color: #d8e7e8" href="https://cuentas-jefes.vercel.app" target="_blank" rel="noopener noreferrer">https://cuentas-jefes.vercel.app</a></p>
+    <div class="actions"><button type="button" onclick="window.print()">Imprimir / Guardar como PDF</button><a href="/manual-usuario.pdf" download>Descargar manual PDF</a></div>
+    <p class="muted" style="color: #d8e7e8">Documento de consulta. No contiene credenciales, comprobantes privados ni registros financieros de la organizaci&oacute;n.</p>
+  </header>
+  <div class="layout">
+    <nav aria-label="Contenido del manual" id="indice">
+      <h2>Contenido</h2>
+      <ol>
+        <li><a href="#acceso">Acceso y seguridad</a></li>
+        <li><a href="#navegacion">Conocer el espacio de trabajo</a></li>
+        <li><a href="#resumen">Interpretar el Resumen</a></li>
+        <li><a href="#tipos">Elegir el tipo de movimiento</a></li>
+        <li><a href="#registro">Registrar un movimiento</a></li>
+        <li><a href="#comprobantes">Comprobantes de Drive</a></li>
+        <li><a href="#historial">Consultar, editar y anular</a></li>
+        <li><a href="#pendientes">Liquidar obligaciones pendientes</a></li>
+        <li><a href="#filtros">Buscar y filtrar</a></li>
+        <li><a href="#reportes">Exportar reportes</a></li>
+        <li><a href="#configuracion">Configurar cat&aacute;logos</a></li>
+        <li><a href="#borradores">Borradores y guardados inciertos</a></li>
+        <li><a href="#problemas">Resolver problemas frecuentes</a></li>
+        <li><a href="#rutina">Lista de control diaria</a></li>
+        <li><a href="#demo">Identificar demostraciones</a></li>
+        <li><a href="#limites">Alcance y responsabilidades</a></li>
+      </ol>
+    </nav>
+    <main id="contenido">
+      <section id="acceso">
+        <h2><span class="num">01</span>Acceso y seguridad</h2>
+        <ol>
+          <li>Abre la direcci&oacute;n de producci&oacute;n en un navegador con conexi&oacute;n a Internet.</li>
+          <li>Espera el mensaje <strong>Verificando configuraci&oacute;n y sesi&oacute;n...</strong>. Si existe una sesi&oacute;n v&aacute;lida, entrar&aacute;s al espacio de trabajo.</li>
+          <li>En <strong>Accede a tus cuentas</strong>, escribe en <strong>Usuario</strong> y <strong>Contrase&ntilde;a</strong> los datos autorizados que te entregue la organizaci&oacute;n por un canal seguro.</li>
+          <li>Pulsa <strong>Iniciar sesi&oacute;n</strong> y espera <strong>Validando tu acceso...</strong>. No repitas el env&iacute;o mientras se valida.</li>
+          <li>Al terminar, pulsa el icono <strong>Cerrar sesi&oacute;n</strong> junto al usuario, en la parte inferior de la navegaci&oacute;n. En un equipo compartido, no dejes abierta la sesi&oacute;n.</li>
+        </ol>
+        <div class="note"><p><strong>Acceso compartido, no cuentas individuales.</strong> El programa usa un usuario y una contrase&ntilde;a compartidos autorizados por la organizaci&oacute;n. No se publican aqu&iacute; sus valores. La auditor&iacute;a identifica ese usuario compartido, no permite atribuir por s&iacute; sola una operaci&oacute;n a una persona concreta.</p></div>
+        <p>La sesi&oacute;n dura hasta <strong>8 horas</strong>. La rotaci&oacute;n del usuario, de la contrase&ntilde;a o del secreto de sesi&oacute;n invalida las sesiones anteriores. Si aparece <strong>Tu sesi&oacute;n expir&oacute; o tu acceso cambi&oacute;. Inicia sesi&oacute;n nuevamente para continuar.</strong>, vuelve a entrar con el acceso vigente y retoma el borrador en la misma pesta&ntilde;a.</p>
+        <p>Si aparece <strong>Configuraci&oacute;n necesaria</strong>, el administrador debe resolver la configuraci&oacute;n del servidor. El usuario final no debe configurar Apps Script ni introducir secretos en el navegador. Puedes usar <strong>Verificar de nuevo</strong> o <strong>Volver a verificar sesi&oacute;n</strong> despu&eacute;s de la correcci&oacute;n.</p>
+      </section>
+      <section id="navegacion">
+        <h2><span class="num">02</span>Conocer el espacio de trabajo</h2>
+        <div class="table-wrap"><table><thead><tr><th>Pantalla</th><th>Para qu&eacute; sirve</th></tr></thead><tbody>
+          <tr><td><strong>Resumen</strong><br>Resumen general</td><td>Indicadores de inversi&oacute;n y pendientes, tarjetas por responsable y gr&aacute;ficos.</td></tr>
+          <tr><td><strong>Movimientos</strong></td><td>Historial, incluidos anulados; detalle, edici&oacute;n y anulaci&oacute;n.</td></tr>
+          <tr><td><strong>Pendientes</strong><br>Obligaciones pendientes</td><td>Obligaciones vigentes con saldo por liquidar y bot&oacute;n Pagar.</td></tr>
+          <tr><td><strong>Reportes</strong></td><td>Selecci&oacute;n de per&iacute;odo, vista previa y descargas Excel o PDF.</td></tr>
+          <tr><td><strong>Configuraci&oacute;n</strong></td><td>Responsables, Categor&iacute;as, Formas de pago y consulta de Estados protegidos.</td></tr>
+        </tbody></table></div>
+        <p><strong>Nuevo movimiento</strong>, en el encabezado, y <strong>Registrar movimiento</strong>, en la navegaci&oacute;n, abren el mismo formulario. Si hay un borrador, se muestra <strong>Retomar borrador</strong>. En Configuraci&oacute;n puedes abrirlo desde la navegaci&oacute;n.</p>
+        <h3>En el tel&eacute;fono</h3>
+        <p>Pulsa <strong>Abrir navegaci&oacute;n</strong> para desplegar el men&uacute;; elige una pantalla y el men&uacute; se cerrar&aacute;. Usa <strong>Cerrar men&uacute;</strong> si no deseas cambiar. Desliza las tablas horizontalmente para ver importes, comprobantes y acciones; no confundas una columna fuera de la pantalla con una columna ausente.</p>
+        <h3>Carga y actualizaci&oacute;n</h3>
+        <p>El icono <strong>Actualizar datos</strong>, en la barra superior, vuelve a consultar movimientos y cat&aacute;logos. Espera <strong>Cargando movimientos y cat&aacute;logos...</strong> o <strong>Actualizando informaci&oacute;n...</strong>. Algunas acciones se deshabilitan durante cargas y guardados. No hay actualizaci&oacute;n autom&aacute;tica continua: actualiza antes de revisar cambios realizados desde otra sesi&oacute;n.</p>
+        <p>Ante un fallo posterior a una carga correcta, los datos visibles son los de la &uacute;ltima carga correcta, no una confirmaci&oacute;n de que el servidor est&aacute; actualizado. Usa <strong>Reintentar</strong>. Si nunca cargaron, aparecer&aacute; <strong>No pudimos cargar la informaci&oacute;n</strong> con <strong>Reintentar conexi&oacute;n</strong>.</p>
+      </section>
+      <section id="resumen">
+        <h2><span class="num">03</span>Interpretar el Resumen</h2>
+        <ol>
+          <li>Revisa primero la b&uacute;squeda y los filtros: tambi&eacute;n afectan al Resumen.</li>
+          <li>Consulta <strong>Gasto</strong>, <strong>Compra</strong> y <strong>Pago</strong>: son totales de obligaciones independientes vigentes, no solo el dinero pagado.</li>
+          <li>Lee <strong>Total invertido</strong> como la suma completa de esos tres grupos. Incluye pendientes y pagos parciales por su total registrado.</li>
+          <li>Consulta <strong>Pendiente</strong> para conocer lo que falta liquidar, y <strong>Por responsable</strong> para revisar la distribuci&oacute;n.</li>
+          <li>Para el efectivo registrado, consulta <strong>Ingresos efectivos</strong>, <strong>Egresos efectivos</strong> y <strong>Neto del per&iacute;odo</strong>, no Total invertido.</li>
+        </ol>
+        <div class="note"><p><strong>Regla de inversi&oacute;n:</strong> suma de TOTAL de Gasto, Compra y Pago independientes no anulados. Un Pago vinculado no suma otra inversi&oacute;n. Ingreso, Transferencia, Retiro, Pr&eacute;stamo, Adelanto y Reembolso no se incluyen. Un reembolso no resta inversi&oacute;n; la anulaci&oacute;n excluye la obligaci&oacute;n anulada.</p></div>
+        <p>El saldo pendiente de una obligaci&oacute;n es su total menos su <strong>Pago propio</strong> y los pagos vinculados vigentes. Se calcula con todo el historial, incluidos pagos posteriores o fuera del per&iacute;odo filtrado. Por tanto, un reporte de un per&iacute;odo pasado muestra el <strong>pendiente actual</strong>, no una reconstrucci&oacute;n del saldo que hab&iacute;a al cierre de ese per&iacute;odo.</p>
+        <h3>Gr&aacute;ficos y signos de efectivo</h3>
+        <p><strong>Gastos por categor&iacute;a</strong>, <strong>Gastos por responsable</strong> y <strong>Evoluci&oacute;n de gastos</strong> usan obligaciones independientes. La evoluci&oacute;n es su acumulado por fecha, no un saldo bancario. <strong>Gastos y flujo mensual</strong> separa obligaciones de ingresos y egresos efectivos. <strong>Formas de pago</strong> muestra egresos efectivos, no importes pendientes.</p>
+        <p>Los ingresos efectivos se suman como entradas; los egresos como salidas. El neto es entradas menos salidas. Para Gasto, Compra y Pago, el flujo usa el importe pagado propio de cada registro; los abonos vinculados aportan su efectivo en su propia fecha, sin duplicar la inversi&oacute;n original. Los anulados no aportan importes a los totales contables. El total de filas del historial puede incluir anulados, a diferencia del contador de movimientos vigentes.</p>
+      </section>
+      <section id="tipos">
+        <h2><span class="num">04</span>Elegir el tipo de movimiento</h2>
+        <p>El selector <strong>Tipo</strong> ofrece nueve opciones. Decide seg&uacute;n la operaci&oacute;n que realmente necesitas registrar, no seg&uacute;n el resultado que quieras ver en el indicador.</p>
+        <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Inversi&oacute;n</th><th>Tratamiento del efectivo registrado</th></tr></thead><tbody>
+          <tr><td>Gasto</td><td>S&iacute;, total independiente vigente.</td><td>Salida por su importe pagado; puede quedar pendiente.</td></tr>
+          <tr><td>Compra</td><td>S&iacute;, total independiente vigente.</td><td>Salida por su importe pagado; puede quedar pendiente.</td></tr>
+          <tr><td>Pago</td><td>S&iacute; si es independiente. No si est&aacute; vinculado.</td><td>Salida por lo pagado. Vinculado: abona una obligaci&oacute;n existente.</td></tr>
+          <tr><td>Transferencia</td><td>No.</td><td>Solo registro en esta interfaz, sin entrada ni salida en el flujo global y sin redistribuir cuentas.</td></tr>
+          <tr><td>Pr&eacute;stamo</td><td>No.</td><td>Direcci&oacute;n Recibido: entrada por el total. Entregado: salida por el total.</td></tr>
+          <tr><td>Adelanto</td><td>No.</td><td>Direcci&oacute;n Recibido: entrada por el total. Entregado: salida por el total.</td></tr>
+          <tr><td>Reembolso</td><td>No; tampoco resta inversi&oacute;n.</td><td>Entrada por el total.</td></tr>
+          <tr><td>Ingreso</td><td>No.</td><td>Entrada por el total.</td></tr>
+          <tr><td>Retiro</td><td>No.</td><td>Salida por el total.</td></tr>
+        </tbody></table></div>
+        <p><strong>Recibido</strong> y <strong>Entregado</strong> se interpretan desde la perspectiva de la operaci&oacute;n del responsable seleccionado. Debes escoger una direcci&oacute;n en Pr&eacute;stamo y Adelanto; no se ofrece en los otros tipos. Estas operaciones no crean un plan de deuda, cuotas ni amortizaci&oacute;n.</p>
+        <p>Solo Gasto, Compra y Pago independiente permiten <strong>Pagado</strong>, <strong>Pendiente</strong> o <strong>Pago parcial</strong>. Los dem&aacute;s, incluido Pago vinculado, se registran como Pagado. <strong>Anulado</strong> no se elige al crear: se aplica desde la acci&oacute;n Anular.</p>
+        <div class="note warning"><p><strong>No hay selecci&oacute;n ni creaci&oacute;n de cuentas en la interfaz.</strong> La Transferencia nueva se registra sin cuentas de origen o destino y exige un total positivo. No mueve dinero real, no redistribuye saldos entre responsables ni ejecuta operaciones bancarias.</p></div>
+      </section>
+      <section id="registro">
+        <h2><span class="num">05</span>Registrar un movimiento</h2>
+        <p>Antes de empezar, confirma que existen responsables, categor&iacute;as y formas de pago <strong>activos</strong> aprobados. Si falta alguno, el formulario pide completar los cat&aacute;logos en Configuraci&oacute;n. Selecciona registros existentes; no escribas nombres inventados para salir del paso.</p>
+        <h3>Paso 1. Abrir y completar Datos del movimiento</h3>
+        <ol>
+          <li>Pulsa <strong>Nuevo movimiento</strong> o <strong>Registrar movimiento</strong>. El formulario inicia con fecha y hora actuales, Tipo Gasto, cantidad 1 y estado Pagado; revisa estos valores.</li>
+          <li>Completa <strong>Fecha</strong> y <strong>Hora</strong> obligatorias. Usa la fecha de la operaci&oacute;n y una hora v&aacute;lida en formato de 24 horas (HH:mm), no necesariamente la hora de captura.</li>
+          <li>Selecciona <strong>Tipo</strong>. Al cambiarlo se limpian la direcci&oacute;n y el v&iacute;nculo al original y se reinicia el estado; revisa el formulario de nuevo.</li>
+          <li>Si es Pago, revisa <strong>Obligaci&oacute;n de origen</strong>. Es opcional para pagos independientes; para liquidar una obligaci&oacute;n ya registrada elige el original o inicia desde Pendientes &gt; Pagar.</li>
+          <li>Selecciona <strong>Responsable</strong> y <strong>Categor&iacute;a</strong>, ambos obligatorios. En un pago vinculado el responsable es el del original y queda bloqueado.</li>
+          <li>Si corresponde, completa <strong>Subcategor&iacute;a</strong> (opcional, hasta 200 caracteres) y <strong>Direcci&oacute;n</strong> (obligatoria solo para Pr&eacute;stamo o Adelanto).</li>
+          <li>Completa <strong>Proveedor</strong> (opcional, hasta 200 caracteres) y <strong>N.&ordm; de factura</strong> (opcional, hasta 100). La factura es texto: conserva el identificador documental que corresponda.</li>
+          <li>Escribe <strong>Descripci&oacute;n</strong>, obligatoria, hasta 2.000 caracteres. Debe explicar la operaci&oacute;n; no se acepta vac&iacute;a ni formada solo por espacios.</li>
+        </ol>
+        <h3>Paso 2. Completar Importes y pago</h3>
+        <ol>
+          <li>Ingresa <strong>Cantidad</strong>, obligatoria, finita y no negativa, con m&aacute;ximo 1.000.000.000. Admite decimales sin la restricci&oacute;n de dos decimales propia del dinero.</li>
+          <li>Ingresa <strong>Valor unitario (USD)</strong>, obligatorio. Ya debe incluir IVA. El <strong>Subtotal</strong> es cantidad por valor unitario, redondeado a dos decimales.</li>
+          <li>Revisa <strong>Total final (USD)</strong>. Por defecto es el subtotal y no se puede escribir. Si el documento exige otro total, activa <strong>Introducir el total manualmente</strong> y escribe el total final. Al activar la casilla se copia primero el subtotal; el total manual no cambia los valores de cantidad, unitario o subtotal.</li>
+          <li>Elige <strong>Forma de pago</strong>, obligatoria, de un cat&aacute;logo activo, incluso si la obligaci&oacute;n queda pendiente.</li>
+          <li>Revisa <strong>Estado</strong>. En Pagado, el pago propio se fija al total. En Pendiente, se fija en cero. En Pago parcial, completa <strong>Importe pagado (USD)</strong>, que debe ser estrictamente mayor que cero y menor que el total.</li>
+        </ol>
+        <div class="note"><p><strong>No agregues IVA otra vez.</strong> Los precios y el total ya lo incluyen; la aplicaci&oacute;n no a&ntilde;ade impuestos. Valor unitario, total e importe pagado deben ser finitos, no negativos, con m&aacute;ximo dos decimales y hasta 1.000.000.000. El subtotal calculado tambi&eacute;n debe estar dentro del l&iacute;mite monetario: un total manual no permite evadirlo.</p></div>
+        <p>Los importes cero se permiten donde no hay una regla adicional. <strong>Transferencia</strong> y <strong>Pago vinculado</strong> exigen total mayor que cero. El pago vinculado no puede superar el pendiente disponible ni pertenecer a otro responsable. Un pago parcial no puede ser cero ni igual al total.</p>
+        <h3>Paso 3. Completar Respaldo y notas</h3>
+        <ol>
+          <li>A&ntilde;ade <strong>Observaciones</strong> si necesitas contexto adicional (opcional, hasta 2.000 caracteres).</li>
+          <li>Si existe un respaldo autorizado en Google Drive, pega su <strong>URL del comprobante</strong> (opcional, hasta 300 caracteres). Consulta los formatos y permisos en la secci&oacute;n siguiente.</li>
+          <li>Revisa fecha, responsable, tipo, v&iacute;nculo, total, estado y documento. No incluyas contrase&ntilde;as, secretos ni datos personales innecesarios en textos o enlaces.</li>
+          <li>Pulsa <strong>Registrar movimiento</strong> una sola vez. Espera <strong>Guardando...</strong> y la confirmaci&oacute;n <strong>Movimiento registrado correctamente.</strong></li>
+          <li>Comprueba el registro en Movimientos, abre su detalle y actualiza si hace falta. La aplicaci&oacute;n vuelve a consultar los datos despu&eacute;s de guardar.</li>
+        </ol>
+        <p><strong>Cerrar y conservar</strong> oculta el formulario sin guardar ni perder el borrador. <strong>Descartar borrador</strong> pide confirmaci&oacute;n y elimina solo los datos locales no finalizados, no movimientos del servidor. Si el resultado del guardado es incierto, sigue las instrucciones de <a href="#borradores">borradores y reintentos</a> antes de descartar.</p>
+      </section>
+      <section id="comprobantes">
+        <h2><span class="num">06</span>Comprobantes de Drive</h2>
+        <ol>
+          <li>Localiza el archivo correcto en Google Drive. La aplicaci&oacute;n no sube archivos ni crea comprobantes.</li>
+          <li>Pide al propietario que configure el acceso para los destinatarios autorizados seg&uacute;n la pol&iacute;tica de la organizaci&oacute;n; no es necesario hacerlo p&uacute;blico.</li>
+          <li>Copia el enlace HTTPS del archivo y p&eacute;galo en URL del comprobante. No uses un enlace de carpeta, otro dominio o un texto con espacios.</li>
+          <li>Usa <strong>Ver comprobante adjunto</strong> en el formulario, <strong>Ver comprobante</strong> en la tabla o <strong>Abrir comprobante</strong> en el detalle. Se abre en otra pesta&ntilde;a.</li>
+          <li>Si Google pide acceso, verifica la cuenta de Google con la que abriste el archivo y solicita permiso al propietario.</li>
+        </ol>
+        <p>Se aceptan las rutas <code>/file/d/ID/view</code>, <code>/file/d/ID/preview</code> y <code>/open?id=ID</code> en <code>https://drive.google.com</code>. Pueden incluir par&aacute;metros comunes como <code>usp=sharing</code> y <code>resourcekey</code> en la consulta del enlace.</p>
+        <div class="note"><p><strong>Patrones explicativos, no enlaces funcionales:</strong> sustituir <code>{ID_DEL_ARCHIVO}</code> y <code>{CLAVE_DEL_RECURSO}</code> por los valores del enlace real autorizado. Las llaves son marcadores y no se aceptan como parte de una URL v&aacute;lida.</p><p><code>https://drive.google.com/file/d/{ID_DEL_ARCHIVO}/view?usp=sharing</code><br><code>https://drive.google.com/file/d/{ID_DEL_ARCHIVO}/preview</code><br><code>https://drive.google.com/open?id={ID_DEL_ARCHIVO}&amp;resourcekey={CLAVE_DEL_RECURSO}</code></p></div>
+        <p><strong>El acceso al programa no concede acceso a Drive.</strong> El propietario del archivo controla sus permisos, independientemente del usuario compartido de la aplicaci&oacute;n. La validaci&oacute;n del enlace comprueba su formato, no la existencia del archivo, su privacidad ni tu permiso. Este manual no enlaza comprobantes propios o privados.</p>
+      </section>
+      <section id="historial">
+        <h2><span class="num">07</span>Consultar, editar y anular</h2>
+        <h3>Consultar el historial y el detalle</h3>
+        <ol>
+          <li>Abre <strong>Movimientos</strong>. El historial incluye anulados y puede estar limitado por filtros compartidos.</li>
+          <li>Consulta las columnas Fecha / ID, Responsable, Movimiento / categor&iacute;a, Proveedor / factura, Forma de pago, Total, Estado actual, Comprobante y Acciones. Los pagos con origen llevan la etiqueta <strong>Vinculado</strong>.</li>
+          <li>Usa <strong>Anterior</strong> y <strong>Siguiente</strong>: se muestran 20 registros por p&aacute;gina, ordenados de forma descendente por fecha, hora e ID. El ID abreviado en la tabla no es el ID completo.</li>
+          <li>Pulsa el icono <strong>Ver detalle</strong>. All&iacute; puedes consultar el ID completo, fecha/hora, tipo, responsable, categor&iacute;a/subcategor&iacute;a, forma de pago, proveedor, factura, descripci&oacute;n, observaciones y comprobante.</li>
+          <li>Revisa cantidad, valor unitario, subtotal, Total (IVA incluido), Total manual, Pago propio, Pagos vinculados y Saldo pendiente, adem&aacute;s de direcci&oacute;n y Movimiento de origen cuando correspondan.</li>
+        </ol>
+        <p>El detalle muestra <strong>Estado registrado</strong> y <strong>Estado actual</strong>. El registrado conserva la situaci&oacute;n guardada del original; el actual considera todos los pagos vinculados vigentes. Por eso una obligaci&oacute;n registrada como Pendiente puede aparecer actualmente Pagada o con Pago parcial sin haberse reescrito su estado original.</p>
+        <p>Tambi&eacute;n ver&aacute;s metadatos de trazabilidad: Usuario de registro, Creado por, Creaci&oacute;n, Actualizado por, &Uacute;ltima actualizaci&oacute;n y Clave de idempotencia. No son campos que debas completar. Son informaci&oacute;n de registro y auditor&iacute;a; no hay una pantalla de auditor&iacute;a individual completa y el usuario compartido no identifica a cada persona.</p>
+        <h3>Editar sin sobrescribir cambios ajenos</h3>
+        <ol>
+          <li>Actualiza el historial y localiza la operaci&oacute;n correcta por ID.</li>
+          <li>Pulsa <strong>Editar</strong>, revisa los campos y corrige lo necesario. Se usan las mismas validaciones del alta.</li>
+          <li>Pulsa <strong>Guardar cambios</strong> y espera <strong>Movimiento actualizado correctamente.</strong></li>
+          <li>Si otra sesi&oacute;n cambi&oacute; el registro, no insistas con la versi&oacute;n antigua: actualiza, vuelve a abrir la versi&oacute;n vigente y aplica solo los cambios necesarios.</li>
+        </ol>
+        <p>La edici&oacute;n y la anulaci&oacute;n usan la marca de &uacute;ltima actualizaci&oacute;n como <strong>bloqueo optimista</strong>. Un conflicto devuelve 409 en lugar de sobrescribir silenciosamente. No se puede editar un anulado ni un original con pagos vinculados vigentes; estos deben anularse primero. Un borrador abierto debe completarse o descartarse antes de editar otro registro.</p>
+        <h3>Anular de forma permanente</h3>
+        <ol>
+          <li>Verifica ID, documento y motivo. Si hay pagos vinculados vigentes, local&iacute;zalos y an&uacute;lalos primero, uno por uno.</li>
+          <li>En Movimientos, pulsa <strong>Anular</strong> en la fila correcta.</li>
+          <li>Lee la ventana <strong>Anular movimiento</strong>. Usa Cancelar si existe cualquier duda.</li>
+          <li>Pulsa <strong>Confirmar anulaci&oacute;n</strong> y espera <strong>Movimiento anulado correctamente.</strong></li>
+          <li>Actualiza y confirma el estado Anulado y los totales. Al anular un abono, el pendiente del original puede aumentar.</li>
+        </ol>
+        <div class="note warning"><p><strong>Sin restauraci&oacute;n ni borrado f&iacute;sico.</strong> El registro permanece en el historial y en la trazabilidad, pero deja de afectar la inversi&oacute;n, los flujos y las obligaciones. No existe una opci&oacute;n de deshacer o restaurar la anulaci&oacute;n. No borres filas de la hoja para sustituir esta acci&oacute;n.</p></div>
+      </section>
+      <section id="pendientes">
+        <h2><span class="num">08</span>Liquidar obligaciones pendientes</h2>
+        <p>Esta pantalla muestra Gasto, Compra y Pago independientes vigentes cuyo saldo actual es mayor que cero. No es una lista de deudas de pr&eacute;stamos o adelantos. El importe <strong>Por liquidar</strong> suma los pendientes de la selecci&oacute;n.</p>
+        <ol>
+          <li>Abre <strong>Pendientes</strong> y revisa los filtros. Identifica la obligaci&oacute;n y consulta sus columnas Total, Pagado y Pendiente.</li>
+          <li>Pulsa <strong>Pagar</strong> en esa fila. Es la forma recomendada de crear un abono sin duplicar el gasto.</li>
+          <li>El programa abre un nuevo Pago, fija <strong>Obligaci&oacute;n de origen</strong> al original y copia responsable, categor&iacute;a, subcategor&iacute;a, proveedor y una descripci&oacute;n de pago. La fecha/hora son las actuales; rev&iacute;salas.</li>
+          <li>El valor unitario y el total se precargan con el saldo disponible completo, que es el m&aacute;ximo para este pago. Deja ese total para liquidar o red&uacute;celo para un abono. Con cantidad 1, puedes ajustar el unitario; tambi&eacute;n puedes usar total manual.</li>
+          <li>Selecciona la <strong>Forma de pago</strong>, revisa factura, observaciones y enlace opcionales. El responsable queda fijado al del original; no hay cuentas que seleccionar. Este nuevo pago se registra como Pagado aunque solo liquide parte del original.</li>
+          <li>Pulsa <strong>Registrar movimiento</strong>. Tras la confirmaci&oacute;n, el abono queda en el historial y disminuye el pendiente. Si llega a cero, el original sale de esta pantalla y su estado actual pasa a Pagado.</li>
+        </ol>
+        <div class="note warning"><p><strong>Pago vinculado no es Pago independiente.</strong> Si dejas Obligaci&oacute;n de origen en <strong>Pago independiente (no vinculado)</strong>, crear&aacute;s una nueva obligaci&oacute;n que suma inversi&oacute;n y no liquida el original. No uses esa opci&oacute;n para pagar algo ya registrado: podr&iacute;as duplicar la operaci&oacute;n contable.</p></div>
+        <p>Un pago vinculado debe ser positivo, del mismo responsable y no superar el saldo disponible, calculado con todos los pagos vigentes. Si editas un pago vinculado, el m&aacute;ximo toma en cuenta su propio importe anterior para poder sustituirlo sin contarlo dos veces. Si otra sesi&oacute;n acaba de pagar el original, actualiza antes de reintentar.</p>
+        <p><strong>Sin obligaciones pendientes en esta selecci&oacute;n</strong> puede indicar que todo est&aacute; liquidado o que los filtros excluyen obligaciones. Pulsa <strong>Consultar todo el historial</strong> antes de concluir que no existen pendientes.</p>
+      </section>
+      <section id="filtros">
+        <h2><span class="num">09</span>Buscar y filtrar</h2>
+        <ol>
+          <li>Escribe en <strong>Buscar movimientos</strong>. Busca coincidencias parciales sin distinguir may&uacute;sculas en cinco campos l&oacute;gicos: ID, descripci&oacute;n, proveedor, n&uacute;mero de factura y observaciones. La factura admite las dos denominaciones de almacenamiento; no son dos filtros distintos.</li>
+          <li>Pulsa <strong>Filtros</strong> para desplegar los ocho criterios: Desde, Hasta, Responsable, Categor&iacute;a, Tipo, Estado actual, Forma de pago y Proveedor.</li>
+          <li>Selecciona uno o varios. Se aplican conjuntamente con la b&uacute;squeda. Las fechas inicial y final son inclusivas; puedes dejar cualquiera vac&iacute;a para no limitar ese extremo.</li>
+          <li>Comprueba el contador de filtros y los resultados. Cerrar el panel no desactiva los filtros.</li>
+          <li>Usa <strong>Limpiar</strong> o <strong>Limpiar filtros</strong> para restablecer toda la selecci&oacute;n, incluida la b&uacute;squeda.</li>
+        </ol>
+        <p>Los filtros y la b&uacute;squeda <strong>se conservan al cambiar entre Resumen, Movimientos, Pendientes y Reportes</strong>. El estado filtrado es el actual calculado, no el almacenado originalmente. Los filtros permiten consultar cat&aacute;logos inactivos para revisar el historial; Proveedor se obtiene de los valores registrados.</p>
+        <p>Si ves <strong>La fecha inicial no puede ser posterior a la fecha final.</strong>, corrige el rango. No hay resultados ni exportaci&oacute;n para un rango inv&aacute;lido. <strong>El registro est&aacute; vac&iacute;o</strong> significa que no hay movimientos cargados; <strong>No hay resultados con estos filtros</strong> significa que el historial existe pero no coincide con la selecci&oacute;n.</p>
+        <div class="note"><p><strong>Antes de exportar todo:</strong> limpia filtros y b&uacute;squeda, selecciona todos los responsables, categor&iacute;as, tipos, estados, formas y proveedores y deja ambas fechas vac&iacute;as. <strong>Todo el per&iacute;odo</strong> solo borra las fechas; no elimina los dem&aacute;s filtros ni la b&uacute;squeda.</p></div>
+      </section>
+      <section id="reportes">
+        <h2><span class="num">10</span>Exportar reportes</h2>
+        <ol>
+          <li>Actualiza los datos y abre <strong>Reportes</strong>. Si quieres todo el historial, limpia primero la selecci&oacute;n compartida.</li>
+          <li>Elige <strong>Hoy</strong>, <strong>Esta semana</strong> (lunes hasta hoy) o <strong>Este mes</strong> (d&iacute;a 1 hasta hoy). Los extremos son inclusivos. Para un rango propio, completa Desde y Hasta.</li>
+          <li>Para quitar solo el rango de fechas, pulsa <strong>Todo el per&iacute;odo</strong>. Revisa los dem&aacute;s filtros y el texto de b&uacute;squeda antes de continuar.</li>
+          <li>Comprueba <strong>Registros seleccionados</strong>, <strong>Total invertido (incluye pendientes)</strong>, <strong>Egresos efectivos</strong> y <strong>Pendiente actual</strong>.</li>
+          <li>Revisa la <strong>Vista previa del reporte</strong>. La tabla se pagina, pero la exportaci&oacute;n incluye todos los registros seleccionados, no solo los 20 de la p&aacute;gina visible.</li>
+          <li>Pulsa <strong>Descargar Excel</strong> o <strong>Descargar PDF</strong> y espera Generando Excel... o Generando PDF... No inicies otra exportaci&oacute;n mientras se prepara.</li>
+          <li>Abre el archivo descargado, comprueba el per&iacute;odo y los criterios y comp&aacute;rtelo solo con destinatarios autorizados.</li>
+        </ol>
+        <h3>Las 13 columnas de la exportaci&oacute;n</h3>
+        <ol>
+          <li>Fecha.</li><li>ID.</li><li>Responsable.</li><li>Tipo / direcci&oacute;n.</li><li>Categor&iacute;a (incluye subcategor&iacute;a cuando existe).</li><li>Proveedor / factura.</li><li>Descripci&oacute;n / observaciones.</li><li>Forma de pago.</li><li>Total.</li><li>Pagado actual.</li><li>Pendiente.</li><li>Estado actual / registrado.</li><li>Comprobante.</li>
+        </ol>
+        <p>Las exportaciones se ordenan por fecha ascendente, a diferencia del historial en pantalla. <strong>Pagado actual</strong> del original incluye su pago propio y los pagos vinculados; estos pueden aparecer tambi&eacute;n como filas separadas. Estado actual y Pendiente consideran todo el historial, incluso abonos fuera del rango.</p>
+        <div class="note warning"><p><strong>No sumes los totales crudos de todas las filas como inversi&oacute;n.</strong> Hay pagos vinculados que liquidan obligaciones ya incluidas y anulados conservados para consulta. Tampoco sumes Pagado actual de originales y abonos para obtener efectivo. Usa los <strong>Totales contables</strong> exportados: Total invertido, Ingresos efectivos, Egresos efectivos y Pendiente actual.</p></div>
+        <h3>Formato y almacenamiento</h3>
+        <p>Excel descarga un archivo <code>.xlsx</code> con hoja Movimientos, fechas locales formateadas <code>dd/mm/yyyy</code>, importes num&eacute;ricos con formato USD de dos decimales y filtro en los encabezados. El nombre sigue <code>cuentas-reporte-AAAA-MM-DD.xlsx</code>. PDF descarga <code>cuentas-reporte-AAAA-MM-DD.pdf</code>, con las 13 columnas en <strong>A3 horizontal</strong>, criterios, totales y paginaci&oacute;n. Este formato es distinto del manual, preparado en A4 vertical.</p>
+        <p><strong>El Excel es una fotograf&iacute;a de la selecci&oacute;n al descargar.</strong> No se sincroniza autom&aacute;ticamente, no actualiza el programa si lo editas y no hay reimportaci&oacute;n desde Excel. Genera otro reporte para reflejar cambios posteriores.</p>
+        <p>La fuente principal es <strong>Google Sheets</strong>. Las consultas, altas, cambios y anulaciones de la interfaz pasan por una API JSON del servidor hacia Apps Script y actualizan ese almacenamiento. No es una integraci&oacute;n de Excel en vivo ni una invitaci&oacute;n a editar directamente la hoja.</p>
+        <p>Si aparece <strong>No hay registros para exportar</strong>, ajusta fechas, filtros y b&uacute;squeda. La descarga est&aacute; deshabilitada durante una carga, con fechas inv&aacute;lidas, sin registros o mientras se genera otro reporte.</p>
+      </section>
+      <section id="configuracion">
+        <h2><span class="num">11</span>Configurar cat&aacute;logos</h2>
+        <p>Los cat&aacute;logos definen las opciones del formulario. Cambia solo datos aprobados por la organizaci&oacute;n. La interfaz no separa funciones por roles individuales, por lo que la responsabilidad de acordar estos cambios es organizativa.</p>
+        <ol>
+          <li>Abre <strong>Configuraci&oacute;n</strong> y elige <strong>Responsables</strong>, <strong>Categor&iacute;as</strong> o <strong>Formas de pago</strong>.</li>
+          <li>Consulta Nombre, Estado e ID. Comprueba que el elemento no existe antes de pulsar <strong>Agregar</strong>.</li>
+          <li>Completa <strong>Nombre</strong>, obligatorio, hasta 150 caracteres, y selecciona <strong>Activo</strong> o <strong>Inactivo</strong>. No se admiten nombres duplicados en el mismo cat&aacute;logo.</li>
+          <li>Pulsa <strong>Guardar cat&aacute;logo</strong>, espera la confirmaci&oacute;n y revisa la lista actualizada.</li>
+          <li>Para corregir un elemento, pulsa <strong>Editar</strong>. Para dejar de ofrecerlo en nuevas operaciones, c&aacute;mbialo a Inactivo, sin borrar ni reemplazar su ID.</li>
+        </ol>
+        <p>Solo los activos se ofrecen en la selecci&oacute;n de nuevas operaciones. Los inactivos permanecen para lectura del historial y conservan su nombre en el cat&aacute;logo. Los movimientos referencian IDs y la pantalla resuelve el nombre del cat&aacute;logo: <strong>renombrar un elemento puede cambiar c&oacute;mo se muestra tambi&eacute;n en registros antiguos</strong>; no es una copia inmutable del nombre original. Evita renombrar para dar a un ID otro significado.</p>
+        <p>Al editar un movimiento antiguo que referencia un elemento ahora inactivo, puede que ese nombre no est&eacute; entre las opciones activas del desplegable. La referencia hist&oacute;rica sin cambios puede conservarse en el servidor; si necesitas cambiarla, elige un elemento activo autorizado.</p>
+        <h3>Estados protegidos</h3>
+        <p>La pesta&ntilde;a <strong>Estados</strong> es de consulta. Sus cuatro reglas son <strong>Pagado</strong>, <strong>Pendiente</strong>, <strong>Pago parcial</strong> y <strong>Anulado</strong>. Se muestran como <strong>Protegido</strong>: no se pueden agregar estados personalizados, renombrarlos ni desactivarlos. Una ampliaci&oacute;n requerir&iacute;a cambios y validaciones contables del backend, no una operaci&oacute;n de usuario.</p>
+        <p>No hay pesta&ntilde;a de cuentas, creaci&oacute;n de cuentas, fusi&oacute;n de cuentas ni configuraci&oacute;n bancaria en esta interfaz. Si faltan los estados del sistema, solicita al administrador que verifique la estructura del servidor.</p>
+      </section>
+      <section id="borradores">
+        <h2><span class="num">12</span>Borradores y guardados inciertos</h2>
+        <p>Un borrador mantiene los campos y una clave UUID de idempotencia para no duplicar el alta al reintentar. Se conserva en memoria y, cuando el navegador lo permite, en <code>sessionStorage</code> para el mismo usuario y la misma pesta&ntilde;a. No es un respaldo permanente ni compartido entre dispositivos; no cuentes con recuperarlo al cerrar definitivamente la pesta&ntilde;a o borrar el almacenamiento del navegador.</p>
+        <h3>Si no terminaste de completar el formulario</h3>
+        <ol>
+          <li>Pulsa <strong>Cerrar y conservar</strong>. Cerrar la ventana o usar Escape cuando no est&aacute; guardando tambi&eacute;n la oculta sin eliminar el borrador.</li>
+          <li>Pulsa <strong>Retomar borrador</strong> para volver a los mismos datos. Solo se trabaja con un borrador a la vez.</li>
+          <li>Si deseas abandonarlo, pulsa <strong>Descartar borrador</strong> y confirma la advertencia. Esto no anula ni elimina registros guardados.</li>
+        </ol>
+        <h3>Si el servidor pudo guardar pero no lleg&oacute; la confirmaci&oacute;n</h3>
+        <ol>
+          <li>No abras una nueva operaci&oacute;n con los mismos datos. Que aparezca un error de conexi&oacute;n no demuestra que no se guard&oacute;.</li>
+          <li>Conserva el borrador: el programa retiene la misma clave y el payload exacto enviado. Los campos quedan bloqueados cuando el resultado es incierto.</li>
+          <li>Recupera la conexi&oacute;n o inicia sesi&oacute;n de nuevo si expir&oacute;. En la misma pesta&ntilde;a, usa <strong>Retomar borrador</strong> y <strong>Reintentar guardado</strong> sin modificar los datos.</li>
+          <li>Actualiza el historial para verificar el resultado. Consulta el ID y la Clave de idempotencia en el detalle; la b&uacute;squeda general busca el ID, no la clave UUID.</li>
+          <li>Antes de descartar un guardado incierto, confirma que revisaste el historial por ID o clave y que no crear&aacute;s una segunda operaci&oacute;n. El di&aacute;logo de descarte exige esa verificaci&oacute;n.</li>
+        </ol>
+        <p>El aviso dice <strong>La respuesta del servidor no se pudo confirmar. Reintenta sin modificar los datos: se conserva la misma clave para evitar duplicados.</strong> Los rechazos definitivos de validaci&oacute;n, permisos o conflicto pueden permitir corregir el borrador, a diferencia de un resultado incierto. Si permanece bloqueado, no cambies su clave ni fabriques un segundo env&iacute;o; verifica con el administrador.</p>
+        <div class="note"><p><strong>No es una aplicaci&oacute;n sin conexi&oacute;n.</strong> Un borrador no se env&iacute;a autom&aacute;ticamente al recuperar Internet. Las lecturas de datos a Google pueden tener hasta tres intentos dentro de un plazo compartido de 55 segundos; no son tres esperas de 55 segundos. Las escrituras no se reintentan autom&aacute;ticamente: el usuario reintenta conservando la solicitud original.</p></div>
+      </section>
+      <section id="problemas">
+        <h2><span class="num">13</span>Resolver problemas frecuentes</h2>
+        <p>Conserva el texto exacto del mensaje. Para pedir ayuda, informa pantalla, acci&oacute;n, hora e ID cuando exista, sin enviar contrase&ntilde;as, secretos o documentos privados a canales no autorizados.</p>
+        <h3>Conexi&oacute;n o respuesta inv&aacute;lida</h3>
+        <p><strong>No se pudo conectar con el servidor de datos.</strong> Revisa Internet y usa Reintentar o Actualizar datos para consultar. <strong>El servidor no devolvi&oacute; una respuesta v&aacute;lida. Int&eacute;ntalo nuevamente.</strong> indica una respuesta que el programa no pudo interpretar. Si se repite, contacta al administrador. En un guardado, aplica primero el procedimiento de resultado incierto.</p>
+        <p>El prefijo de error al guardar es <strong>No se pudo guardar el movimiento. Verifique la conexi&oacute;n.</strong> Puede ir seguido de la causa concreta; no todos estos errores son de Internet. Al anular se muestra <strong>No se pudo anular el movimiento.</strong> seguido de la causa, y al exportar, <strong>No se pudo generar el reporte.</strong> seguido de la causa.</p>
+        <h3>Validaciones del formulario</h3>
+        <div class="table-wrap"><table><thead><tr><th>Mensaje</th><th>Qu&eacute; revisar</th></tr></thead><tbody>
+          <tr><td>Ingresa una descripci&oacute;n para el movimiento.</td><td>Descripci&oacute;n con contenido, no solo espacios.</td></tr>
+          <tr><td>Los importes deben ser n&uacute;meros no negativos, con m&aacute;ximo dos decimales y hasta 1.000.000.000.</td><td>Valor unitario, total y pagado; evita m&aacute;s de dos decimales o campos vac&iacute;os.</td></tr>
+          <tr><td>Ingresa una cantidad v&aacute;lida y no negativa.</td><td>Cantidad finita entre cero y 1.000.000.000.</td></tr>
+          <tr><td>El pago parcial debe ser mayor que cero y menor que el total.</td><td>Si nada se pag&oacute;, usa Pendiente; si se pag&oacute; todo, usa Pagado.</td></tr>
+          <tr><td>La transferencia requiere un total mayor que cero.</td><td>Total positivo; es solo un registro, no una transferencia bancaria.</td></tr>
+          <tr><td>Usa un enlace HTTPS de drive.google.com: /file/d/ID/view, /file/d/ID/preview u /open?id=ID. El comprobante es opcional.</td><td>Usa un enlace de archivo admitido o deja el campo vac&iacute;o.</td></tr>
+        </tbody></table></div>
+        <p>Para un abono no v&aacute;lido, el formulario indica <strong>El pago debe pertenecer al mismo responsable, ser mayor que cero y no superar</strong> el importe de saldo pendiente mostrado. Revisa original, responsable y total. El navegador tambi&eacute;n puede se&ntilde;alar campos obligatorios, fecha/hora o restricciones num&eacute;ricas antes del env&iacute;o.</p>
+        <h3>Conflicto 409: el registro cambi&oacute;</h3>
+        <p>El mensaje del servidor es <strong>El movimiento cambio. Recargue antes de editar.</strong> Cierra conservando los datos que necesites, actualiza el historial y compara el detalle vigente. Si el rechazo fue definitivo, descarta el borrador obsoleto con confirmaci&oacute;n y abre otra vez Editar sobre la versi&oacute;n actual. No intentes sobrescribir cambios de otra sesi&oacute;n a ciegas.</p>
+        <p><strong>Anule primero los pagos vinculados antes de editar o anular el gasto original</strong> indica protecci&oacute;n del original. Consulta los abonos y an&uacute;lalos solo si corresponde; no borres filas. <strong>Clave de idempotencia en uso con otra solicitud</strong> requiere verificar el registro y el env&iacute;o con el administrador, no cambiar arbitrariamente la clave para forzar otra alta.</p>
+        <h3>Drive, filtros y descargas</h3>
+        <p><strong>Google solicita acceso:</strong> revisa tu cuenta de Google y pide permiso al propietario. Iniciar sesi&oacute;n en Cuentas no lo resuelve. <strong>Faltan registros:</strong> limpia b&uacute;squeda y los ocho filtros; revisa fechas, estado actual, paginaci&oacute;n y si est&aacute;s en Pendientes. <strong>No descarga:</strong> espera la generaci&oacute;n y revisa la carpeta de descargas y avisos del navegador. Si el reporte est&aacute; vac&iacute;o, ajusta la selecci&oacute;n.</p>
+        <h3>Configuraci&oacute;n y permisos del servidor</h3>
+        <p>Errores de configuraci&oacute;n incompleta, estructura de Sheets, despliegue o permisos de Apps Script son responsabilidad del administrador. El usuario final no debe ejecutar funciones de instalaci&oacute;n ni modificar encabezados. Nunca compartas valores privados de configuraci&oacute;n para intentar solucionarlos desde este manual.</p>
+      </section>
+      <section id="rutina">
+        <h2><span class="num">14</span>Lista de control diaria</h2>
+        <ol>
+          <li>Entra con el acceso autorizado y pulsa Actualizar datos; confirma que no hay errores de carga.</li>
+          <li>Limpia filtros y b&uacute;squeda antes de revisar el panorama completo.</li>
+          <li>Consulta Total invertido y Pendiente sin confundirlos con efectivo o saldo bancario.</li>
+          <li>Antes de registrar, busca ID, factura o descripci&oacute;n para evitar duplicados.</li>
+          <li>Revisa responsable, tipo, fecha, total con IVA y estado; usa Pagar para obligaciones existentes.</li>
+          <li>Comprueba los registros guardados y sus comprobantes con los permisos apropiados.</li>
+          <li>Resuelve borradores inciertos sin crear una segunda operaci&oacute;n.</li>
+          <li>Genera el reporte requerido, verifica filtros y usa sus totales contables, no sumas indiscriminadas de filas.</li>
+          <li>Identifica registros de demostraci&oacute;n si los hubiera y no los presentes como operaciones reales.</li>
+          <li>Cierra sesi&oacute;n. Guarda los reportes solo en ubicaciones autorizadas.</li>
+        </ol>
+      </section>
+      <section id="demo">
+        <h2><span class="num">15</span>Identificar demostraciones</h2>
+        <p>Se agregaron, con autorizaci&oacute;n, <strong>10 movimientos ficticios de Franco Becerra y 10 de Josselyn Becerra</strong>. Se distinguen por <code>[DEMO]</code> en la descripci&oacute;n y por el lote <code>DEMO-10-POR-JEFE-20261008</code> en las observaciones. El registro preexistente no fue modificado. Busca el marcador o el lote y revisa el detalle antes de actuar.</p>
+        <p>Para practicar, abre Movimientos, busca <code>[DEMO]</code>, elige un responsable en Filtros y revisa sus 10 registros. En Pendientes puedes observar obligaciones sin pagar y pagos parciales. En Reportes conserva la b&uacute;squeda para exportar solo demostraciones. Sus fechas simuladas van del 29/09/2026 al 08/10/2026; usa <strong>Todo el per&iacute;odo</strong> para verlas todas.</p>
+        <p><a href="/movimientos-demo.xlsx" download>Descargar Excel de los 20 movimientos ficticios</a>. Este archivo contiene exclusivamente el lote de demostraci&oacute;n, no datos financieros reales. Es una instant&aacute;nea de la carga inicial: los cambios posteriores en la aplicaci&oacute;n no lo actualizan. Para un reporte actualizado, utiliza Descargar Excel en Reportes.</p>
+        <div class="note warning"><p><strong>El marcador no cambia la contabilidad.</strong> Un registro [DEMO] vigente se procesa igual que cualquier otro de su tipo y puede afectar los indicadores. No hay un modo de entrenamiento aislado ni un filtro especial que excluya autom&aacute;ticamente demostraciones. No presentes una selecci&oacute;n que las incluya como datos exclusivamente reales.</p></div>
+        <ol>
+          <li>Confirma que existe autorizaci&oacute;n y cu&aacute;l es la etiqueta exacta del lote a retirar.</li>
+          <li>Busca el marcador y el lote; comprueba cada ID para no tocar originales ni otros registros.</li>
+          <li>Si hay pagos vinculados de demostraci&oacute;n, an&uacute;lalos primero. Despu&eacute;s anula los originales de demostraci&oacute;n autorizados.</li>
+          <li>Usa la acci&oacute;n <strong>Anular</strong> de la aplicaci&oacute;n, que tramita la anulaci&oacute;n por la API financiera y conserva historial y auditor&iacute;a. No elimines f&iacute;sicamente filas de Sheets.</li>
+          <li>Actualiza y verifica que las demostraciones anuladas dejan de afectar los totales. Su rastro seguir&aacute; visible al consultar el historial.</li>
+        </ol>
+        <p>No se incluyen en esta gu&iacute;a operaciones ficticias para copiar, importes reales, archivos privados ni credenciales. No modifiques una operaci&oacute;n real preexistente para convertirla en demostraci&oacute;n.</p>
+      </section>
+      <section id="limites">
+        <h2><span class="num">16</span>Alcance y responsabilidades</h2>
+        <ul>
+          <li>Registro y consulta de operaciones; no conexi&oacute;n a bancos, conciliaci&oacute;n bancaria autom&aacute;tica ni ejecuci&oacute;n de pagos reales.</li>
+          <li>Enlaces a Drive; no carga de archivos, custodia de comprobantes ni concesi&oacute;n de permisos de Google desde la aplicaci&oacute;n.</li>
+          <li>Pr&eacute;stamos y adelantos con direcci&oacute;n; no m&oacute;dulo de deuda, intereses, cuotas o amortizaci&oacute;n.</li>
+          <li>Anulaci&oacute;n permanente con historial; no borrado f&iacute;sico ni restauraci&oacute;n de anulados.</li>
+          <li>Acceso compartido; no m&uacute;ltiples cuentas individuales, roles diferenciados o atribuci&oacute;n individual garantizada por auditor&iacute;a.</li>
+          <li>Sin interfaz para crear, seleccionar o fusionar cuentas; Transferencia nueva es solo registro sin redistribuci&oacute;n.</li>
+          <li>Excel y PDF son exportaciones de consulta; no sincronizaci&oacute;n autom&aacute;tica con Excel ni reimportaci&oacute;n.</li>
+          <li>Uso en l&iacute;nea; el borrador de una pesta&ntilde;a no es una cola de trabajo offline ni una copia de seguridad.</li>
+        </ul>
+        <p><strong>Usuario final:</strong> registrar solo operaciones autorizadas, revisar los documentos, distinguir demostraciones, cuidar el acceso y verificar filtros y totales antes de compartir. <strong>Administrador:</strong> administrar acceso, rotaci&oacute;n y secretos del servidor, despliegue, estructura y respaldo del almacenamiento.</p>
+        <p>Apps Script opera con los permisos del propietario del despliegue, no con una cuenta de Google individual que cada usuario final autorice al entrar. El usuario de la aplicaci&oacute;n y el propietario t&eacute;cnico de Apps Script son identidades distintas. Esa configuraci&oacute;n no concede autom&aacute;ticamente al usuario permisos sobre comprobantes de Drive ni autoriza editar directamente las hojas.</p>
+        <p>La validaci&oacute;n t&eacute;cnica no sustituye la revisi&oacute;n documental ni la pol&iacute;tica de autorizaci&oacute;n de la organizaci&oacute;n. Comparte reportes con cuidado: pueden incluir descripciones, proveedores, facturas y enlaces aunque este manual no contenga datos privados.</p>
+        <a class="back" href="#indice">Volver al contenido</a>
+      </section>
+      <footer>Cuentas / Gerencia &middot; Manual de consulta e impresi&oacute;n &middot; Interfaz y reglas contrastadas con el c&oacute;digo del programa. El administrador debe revisar esta gu&iacute;a cuando cambien las funciones.</footer>
+    </main>
+  </div>
+</body>
+</html>

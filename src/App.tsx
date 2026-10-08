@@ -73,7 +73,7 @@ export default function App() {
       </form>{authBusy && <p className="muted" role="status">Validando tu acceso...</p>}<div className="login-security"><ShieldCheck size={20} /><p>Solo los usuarios autorizados pueden acceder. Tu sesión está protegida. Los permisos de los comprobantes dependen de su propietario en Drive.</p>
       </div><button className="button text" disabled={authBusy} onClick={() => setRevision(revision + 1)}><RefreshCw size={15} /> Volver a verificar sesión</button>
       </>}
-      <div className="login-help"><CircleHelp size={16} /><span>¿Necesitas acceso? Contacta al administrador de la organización.</span></div></div><footer>Un registro confiable, de principio a fin.<span>Valores en USD</span></footer></main></div>;
+      <div className="login-help"><CircleHelp size={16} /><span>¿Necesitas acceso? Contacta al administrador de la organización. <a href="/manual-usuario.html" target="_blank" rel="noopener noreferrer">Manual de usuario</a></span></div></div><footer>Un registro confiable, de principio a fin.<span>Valores en USD</span></footer></main></div>;
 }
 
 function restoreDraft(key: string): MovementDraft | null {
@@ -214,7 +214,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => Promise<voi
           </>}
           {page === 'catalogs' && <Catalogs data={data} onSaved={catalogSaved} />}
         </>}
-        <footer className="app-footer"><span>CUENTAS / GERENCIA</span><span>Valores en USD · Precios con IVA incluido</span></footer>
+        <footer className="app-footer"><span>CUENTAS / GERENCIA</span><a href="/manual-usuario.html" target="_blank" rel="noopener noreferrer">Manual de usuario</a><span>Valores en USD · Precios con IVA incluido</span></footer>
       </main>
     </div>
     {data && draft && formOpen && <Modal title={draft.editing ? 'Editar movimiento' : 'Registrar movimiento'} onClose={() => { if (!formBusy) setFormOpen(false); }} locked={formBusy} wide><MovementForm draft={draft} onDraftChange={setDraft} data={data} ledger={ledger} onSaved={saved} onCancel={() => setFormOpen(false)} onDiscard={discardDraft} onBusy={setFormBusy} /></Modal>}
