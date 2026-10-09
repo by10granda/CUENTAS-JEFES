@@ -5,7 +5,7 @@ function reiniciarDatosCliente() {
   try {
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     assertReady_(ss);
-    var targets = ['MOVIMIENTOS', 'CUENTAS', 'AUDITORIA'];
+    var targets = ['MOVIMIENTOS'];
     var snapshots = targets.map(function (name) {
       var sheet = ss.getSheetByName(name);
       var count = Math.max(0, sheet.getLastRow() - 1);

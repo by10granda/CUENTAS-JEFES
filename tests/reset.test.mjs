@@ -30,8 +30,8 @@ function harness(options = {}) {
         clearContent: () => {
           assert.ok(backup && backup.sheets.some(sheet => sheet.name === 'AUDITORIA'), 'Must finish backup before clearing');
           clears++;
-          if (options.clearFailure && this.name === 'CUENTAS') throw new Error('Clear failure');
           for (let i = 0; i < height; i++) for (let j = 0; j < width; j++) this.data[row - 1 + i][column - 1 + j] = '';
+          if (options.clearFailure && this.name === 'MOVIMIENTOS') throw new Error('Partial clear failure');
         },
         setValues: values => {
           if (options.rollbackFailure && this.name === 'MOVIMIENTOS') throw new Error('Rollback failure');
@@ -78,18 +78,18 @@ function harness(options = {}) {
     locked: () => locked, clearCount: () => clears };
 }
 
-test('owner reset privately backs up first, clears all financial data, preserves headers, catalogs and unrelated sheets', () => {
+test('owner reset backs up first, clears movements only and preserves accounts, audit, headers, catalogs and unrelated sheets', () => {
   const h = harness();
   const before = h.sheets.map(sheet => ({ name: sheet.name, data: structuredClone(sheet.data) }));
   const result = h.run();
   assert.equal(result.success, true);
-  assert.deepEqual(JSON.parse(JSON.stringify(result.eliminados)), { MOVIMIENTOS: 2, CUENTAS: 1, AUDITORIA: 1 });
+  assert.deepEqual(JSON.parse(JSON.stringify(result.eliminados)), { MOVIMIENTOS: 2 });
   const backup = h.getBackup();
   assert.equal(backup.sheets.length, 8);
   for (const old of before) {
     const sheet = h.sheets.find(item => item.name === old.name);
     assert.deepEqual(sheet.data[0], old.data[0]);
-    if (['MOVIMIENTOS', 'CUENTAS', 'AUDITORIA'].includes(old.name)) {
+    if (old.name === 'MOVIMIENTOS') {
       assert.equal(sheet.getLastRow(), 1);
       assert.deepEqual(backup.sheets.find(item => item.name === old.name).data, old.data);
     } else assert.deepEqual(sheet.data, old.data);
@@ -120,10 +120,13 @@ test('reset rolls back failed clearing and reports backup URL if restoration fai
   assert.equal(failed.locked(), false);
 });
 
-test('reset on already-empty financial sheets preserves setup and performs no clearing', () => {
+test('reset with no movements leaves historical accounts and audit untouched and performs no clearing', () => {
   const h = harness();
-  for (const sheet of h.sheets.filter(item => ['MOVIMIENTOS', 'CUENTAS', 'AUDITORIA'].includes(item.name))) sheet.data = [sheet.data[0]];
+  const movements = h.sheets.find(sheet => sheet.name === 'MOVIMIENTOS');
+  movements.data = [movements.data[0]];
   assert.equal(h.run().success, true);
   assert.equal(h.clearCount(), 0);
   assert.equal(h.sheets.find(sheet => sheet.name === 'JEFES').getLastRow(), 3);
+  assert.equal(h.sheets.find(sheet => sheet.name === 'CUENTAS').getLastRow(), 2);
+  assert.equal(h.sheets.find(sheet => sheet.name === 'AUDITORIA').getLastRow(), 2);
 });
