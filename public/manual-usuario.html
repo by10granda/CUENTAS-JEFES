@@ -92,7 +92,7 @@
         <li><a href="#borradores">Borradores y guardados inciertos</a></li>
         <li><a href="#problemas">Resolver problemas frecuentes</a></li>
         <li><a href="#rutina">Lista de control diaria</a></li>
-        <li><a href="#demo">Identificar demostraciones</a></li>
+        <li><a href="#demo">Primera puesta en marcha del cliente</a></li>
         <li><a href="#limites">Alcance y responsabilidades</a></li>
       </ol>
     </nav>
@@ -234,7 +234,7 @@
           <li>Pulsa <strong>Confirmar anulaci&oacute;n</strong> y espera <strong>Movimiento anulado correctamente.</strong></li>
           <li>Actualiza y confirma el estado Anulado y los totales. Al anular un abono, el pendiente del original puede aumentar.</li>
         </ol>
-        <div class="note warning"><p><strong>Sin restauraci&oacute;n ni borrado f&iacute;sico.</strong> El registro permanece en el historial y en la trazabilidad, pero deja de afectar la inversi&oacute;n, los flujos y las obligaciones. No existe una opci&oacute;n de deshacer o restaurar la anulaci&oacute;n. No borres filas de la hoja para sustituir esta acci&oacute;n.</p></div>
+        <div class="note warning"><p><strong>Sin restauraci&oacute;n ni borrado f&iacute;sico desde la interfaz normal.</strong> El registro permanece en el historial y en la trazabilidad, pero deja de afectar la inversi&oacute;n, los flujos y las obligaciones. No existe una opci&oacute;n de deshacer o restaurar la anulaci&oacute;n. No borres filas de la hoja para sustituir esta acci&oacute;n. El reinicio excepcional autorizado al propietario, con respaldo previo, se describe en la <a href="#demo">primera puesta en marcha</a>.</p></div>
       </section>
       <section id="pendientes">
         <h2><span class="num">08</span>Liquidar obligaciones pendientes</h2>
@@ -358,24 +358,23 @@
           <li>Comprueba los registros guardados y sus comprobantes con los permisos apropiados.</li>
           <li>Resuelve borradores inciertos sin crear una segunda operaci&oacute;n.</li>
           <li>Genera el reporte requerido, verifica filtros y usa sus totales contables, no sumas indiscriminadas de filas.</li>
-          <li>Identifica registros de demostraci&oacute;n si los hubiera y no los presentes como operaciones reales.</li>
+          <li>Registra solo operaciones reales autorizadas; no agregues datos ficticios para practicar en el almacenamiento del cliente.</li>
           <li>Cierra sesi&oacute;n. Guarda los reportes solo en ubicaciones autorizadas.</li>
         </ol>
       </section>
       <section id="demo">
-        <h2><span class="num">15</span>Identificar demostraciones</h2>
-        <p>Se agregaron, con autorizaci&oacute;n, <strong>10 movimientos ficticios de Franco Becerra y 10 de Josselyn Becerra</strong>. Se distinguen por <code>[DEMO]</code> en la descripci&oacute;n y por el lote <code>DEMO-10-POR-JEFE-20261008</code> en las observaciones. El registro preexistente no fue modificado. Busca el marcador o el lote y revisa el detalle antes de actuar.</p>
-        <p>Para practicar, abre Movimientos, busca <code>[DEMO]</code>, elige un responsable en Filtros y revisa sus 10 registros. En Pendientes puedes observar obligaciones sin pagar y pagos parciales. En Reportes conserva la b&uacute;squeda para exportar solo demostraciones. Sus fechas simuladas van del 29/09/2026 al 08/10/2026; usa <strong>Todo el per&iacute;odo</strong> para verlas todas.</p>
-        <p><a href="/movimientos-demo.xlsx" download>Descargar Excel de los 20 movimientos ficticios</a>. Este archivo contiene exclusivamente el lote de demostraci&oacute;n, no datos financieros reales. Es una instant&aacute;nea de la carga inicial: los cambios posteriores en la aplicaci&oacute;n no lo actualizan. Para un reporte actualizado, utiliza Descargar Excel en Reportes.</p>
-        <div class="note warning"><p><strong>El marcador no cambia la contabilidad.</strong> Un registro [DEMO] vigente se procesa igual que cualquier otro de su tipo y puede afectar los indicadores. No hay un modo de entrenamiento aislado ni un filtro especial que excluya autom&aacute;ticamente demostraciones. No presentes una selecci&oacute;n que las incluya como datos exclusivamente reales.</p></div>
+        <h2><span class="num">15</span>Primera puesta en marcha del cliente</h2>
+        <p>La demostraci&oacute;n ha concluido. El propietario ha autorizado un reinicio excepcional de <strong>todos los datos financieros actualmente almacenados</strong>, incluidos registros originales y agregados posteriormente, para comenzar desde cero. No es una anulaci&oacute;n de un lote ni una operaci&oacute;n disponible en la interfaz normal.</p>
+        <div class="note warning"><p><strong>Reinicio pendiente de ejecuci&oacute;n por el propietario.</strong> Preparar el c&oacute;digo o retirar recursos de demostraci&oacute;n no borra Google Sheets. Hasta que el propietario ejecute la funci&oacute;n y verifique el resultado, los datos remotos permanecen; no se garantiza una respuesta vac&iacute;a de la API ni indicadores en cero.</p></div>
         <ol>
-          <li>Confirma que existe autorizaci&oacute;n y cu&aacute;l es la etiqueta exacta del lote a retirar.</li>
-          <li>Busca el marcador y el lote; comprueba cada ID para no tocar originales ni otros registros.</li>
-          <li>Si hay pagos vinculados de demostraci&oacute;n, an&uacute;lalos primero. Despu&eacute;s anula los originales de demostraci&oacute;n autorizados.</li>
-          <li>Usa la acci&oacute;n <strong>Anular</strong> de la aplicaci&oacute;n, que tramita la anulaci&oacute;n por la API financiera y conserva historial y auditor&iacute;a. No elimines f&iacute;sicamente filas de Sheets.</li>
-          <li>Actualiza y verifica que las demostraciones anuladas dejan de afectar los totales. Su rastro seguir&aacute; visible al consultar el historial.</li>
+          <li>El propietario debe incorporar <code>apps-script/Reset.gs</code> al mismo proyecto de Apps Script conectado y ejecutar <code>reiniciarDatosCliente()</code> exclusivamente desde el editor, con su cuenta propietaria. No requiere republicar la aplicaci&oacute;n web ni usar un endpoint de la API. Coordina una pausa de registros durante el reinicio.</li>
+          <li>Antes del borrado, la funci&oacute;n crea un Google Spreadsheet privado en la cuenta del propietario con respaldo de todas las hojas de <code>SCHEMA</code>. Conserva el enlace del registro de ejecuci&oacute;n y verifica el respaldo; no lo publiques ni lo compartas sin autorizaci&oacute;n.</li>
+          <li>El reinicio vac&iacute;a las filas de datos de <code>MOVIMIENTOS</code>, <code>CUENTAS</code> y <code>AUDITORIA</code>, preservando sus encabezados. Conserva <code>JEFES</code>, <code>CATEGORIAS</code>, <code>FORMAS_PAGO</code>, <code>ESTADOS</code> y <code>CONFIGURACION</code>, incluidos sus IDs, metadatos y cambios autorizados. No crea cuentas, asignaciones de fondos ni movimientos ficticios.</li>
+          <li>Tras una ejecuci&oacute;n correcta, verifica en Sheets que las tres hojas financieras no tienen filas de datos. En la aplicaci&oacute;n, pulsa <strong>Actualizar datos</strong>, limpia toda b&uacute;squeda y todos los filtros y confirma cero movimientos en todo el historial, sin errores de carga. Comprueba los indicadores y los cat&aacute;logos conservados; si quedan registros, det&eacute;n la puesta en marcha y consulta al propietario.</li>
+          <li>Registra el primer movimiento real directamente desde <strong>Nuevo movimiento</strong>, sin cuentas ni saldo inicial. Selecciona los cat&aacute;logos autorizados, completa la operaci&oacute;n real y deja el comprobante vac&iacute;o si no corresponde: es opcional. No generes datos de prueba para comprobar el inicio.</li>
+          <li>Confirma el guardado, recarga y verifica la persistencia en <code>MOVIMIENTOS</code> y su nueva auditor&iacute;a en <code>AUDITORIA</code>. Exporta desde Reportes, abre el archivo y verifica los criterios y la operaci&oacute;n; almacena el reporte solo en una ubicaci&oacute;n autorizada.</li>
         </ol>
-        <p>No se incluyen en esta gu&iacute;a operaciones ficticias para copiar, importes reales, archivos privados ni credenciales. No modifiques una operaci&oacute;n real preexistente para convertirla en demostraci&oacute;n.</p>
+        <p>El reinicio no cambia credenciales ni migra la instalaci&oacute;n. El administrador debe rotar por separado las credenciales para el cliente en la configuraci&oacute;n privada del servidor, sin publicarlas. En el uso habitual sigue vigente la anulaci&oacute;n con historial, sin borrado f&iacute;sico por la interfaz o la API.</p>
       </section>
       <section id="limites">
         <h2><span class="num">16</span>Alcance y responsabilidades</h2>
@@ -383,13 +382,13 @@
           <li>Registro y consulta de operaciones; no conexi&oacute;n a bancos, conciliaci&oacute;n bancaria autom&aacute;tica ni ejecuci&oacute;n de pagos reales.</li>
           <li>Enlaces a Drive; no carga de archivos, custodia de comprobantes ni concesi&oacute;n de permisos de Google desde la aplicaci&oacute;n.</li>
           <li>Pr&eacute;stamos y adelantos con direcci&oacute;n; no m&oacute;dulo de deuda, intereses, cuotas o amortizaci&oacute;n.</li>
-          <li>Anulaci&oacute;n permanente con historial; no borrado f&iacute;sico ni restauraci&oacute;n de anulados.</li>
+          <li>Anulaci&oacute;n permanente con historial; no borrado f&iacute;sico por la interfaz normal ni restauraci&oacute;n de anulados. El reinicio excepcional del propietario requiere respaldo previo y autorizaci&oacute;n expl&iacute;cita.</li>
           <li>Acceso compartido; no m&uacute;ltiples cuentas individuales, roles diferenciados o atribuci&oacute;n individual garantizada por auditor&iacute;a.</li>
           <li>Sin interfaz para crear, seleccionar o fusionar cuentas; Transferencia nueva es solo registro sin redistribuci&oacute;n.</li>
           <li>Excel y PDF son exportaciones de consulta; no sincronizaci&oacute;n autom&aacute;tica con Excel ni reimportaci&oacute;n.</li>
           <li>Uso en l&iacute;nea; el borrador de una pesta&ntilde;a no es una cola de trabajo offline ni una copia de seguridad.</li>
         </ul>
-        <p><strong>Usuario final:</strong> registrar solo operaciones autorizadas, revisar los documentos, distinguir demostraciones, cuidar el acceso y verificar filtros y totales antes de compartir. <strong>Administrador:</strong> administrar acceso, rotaci&oacute;n y secretos del servidor, despliegue, estructura y respaldo del almacenamiento.</p>
+        <p><strong>Usuario final:</strong> registrar solo operaciones reales autorizadas, revisar los documentos, cuidar el acceso y verificar filtros y totales antes de compartir. <strong>Administrador:</strong> administrar acceso, rotaci&oacute;n y secretos del servidor, despliegue, estructura y respaldo del almacenamiento.</p>
         <p>Apps Script opera con los permisos del propietario del despliegue, no con una cuenta de Google individual que cada usuario final autorice al entrar. El usuario de la aplicaci&oacute;n y el propietario t&eacute;cnico de Apps Script son identidades distintas. Esa configuraci&oacute;n no concede autom&aacute;ticamente al usuario permisos sobre comprobantes de Drive ni autoriza editar directamente las hojas.</p>
         <p>La validaci&oacute;n t&eacute;cnica no sustituye la revisi&oacute;n documental ni la pol&iacute;tica de autorizaci&oacute;n de la organizaci&oacute;n. Comparte reportes con cuidado: pueden incluir descripciones, proveedores, facturas y enlaces aunque este manual no contenga datos privados.</p>
         <a class="back" href="#indice">Volver al contenido</a>

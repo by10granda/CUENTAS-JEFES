@@ -6,15 +6,23 @@ Aplicacion administrativa para Franco Becerra y Josselyn Becerra. React 19 + Typ
 
 Guia completa de 16 secciones: [manual en linea](https://cuentas-jefes.vercel.app/manual-usuario.html) y [manual PDF](https://cuentas-jefes.vercel.app/manual-usuario.pdf). El enlace tambien aparece en la pagina de acceso y en el pie de la aplicacion. La fuente es `public/manual-usuario.html`; regenera su PDF con `npm run manual:pdf` despues de modificarla (requiere Chromium de Playwright).
 
-Se agregaron 20 movimientos ficticios autorizados, 10 por cada jefe, con `[DEMO]` en la descripcion y `DEMO-10-POR-JEFE-20261008` en observaciones. El movimiento preexistente permanece sin cambios. [Excel de demostracion](https://cuentas-jefes.vercel.app/movimientos-demo.xlsx) contiene solo esos 20 datos ficticios, nunca el registro original; es una instantanea, no una base de datos sincronizada.
-
-`scripts/seed-demo.mjs` es una utilidad administrativa de carga ficticia idempotente, no se ejecuta en el despliegue. No la ejecutes sin autorizacion: usa las credenciales privadas del proceso, nunca valores escritos en Git. `--export-only` regenera el Excel del lote sin crear movimientos. Para retirar su efecto de los totales, identifica el lote y anula primero sus pagos vinculados y luego sus originales; no alteres registros reales. El borrado fisico de pruebas requiere una decision administrativa posterior explicita.
+La demostracion autorizada ha concluido y queda como antecedente de validacion, no como contenido activo para el cliente. Se retiraron el Excel publico de demostracion y la utilidad de carga ficticia. La seccion 15 del manual describe la primera puesta en marcha sin volver a insertar datos de ejemplo.
 
 ## Estado De La Entrega
 
-Aplicacion desplegada en https://cuentas-jefes.vercel.app con acceso por usuario/contrasena, movimientos sin cuentas y comprobantes opcionales por URL. Se comprobaron el login, las consultas protegidas y la persistencia de 20 movimientos ficticios autorizados en Sheets, incluidos pagos vinculados y pagos parciales. Las credenciales se mantienen exclusivamente en variables privadas. La aplicacion no genera datos de ejemplo automaticamente al abrirla o desplegarla.
+Aplicacion desplegada en https://cuentas-jefes.vercel.app con acceso por usuario/contrasena, movimientos sin cuentas y comprobantes opcionales por URL. Durante la demostracion se comprobaron el login, las consultas protegidas y la persistencia en Sheets, incluidos pagos vinculados y pagos parciales. Las credenciales se mantienen exclusivamente en variables privadas. La aplicacion no genera datos de ejemplo automaticamente al abrirla o desplegarla.
 
-La inspeccion inicial mostro una hoja predeterminada sin filas ni encabezados y el propietario autorizo crear la estructura. Posteriormente autorizo la carga del lote ficticio de 20 movimientos. El registro preexistente a ese lote se conservo sin cambios.
+El propietario ahora autoriza expresamente borrar TODOS los datos financieros actualmente almacenados, incluidos los originales y los agregados posteriormente, tras un respaldo, para iniciar el cliente desde cero. El procedimiento de reinicio esta preparado, pero el borrado remoto sigue pendiente: solo el propietario puede ejecutarlo desde el editor de Apps Script. La ultima lectura conectada reporto 22 movimientos, una cuenta historica, 16 categorias y dos jefes. Hasta ejecutar y verificar el reinicio, esos datos permanecen y no se garantiza una API vacia ni totales en cero.
+
+### Reinicio Excepcional Del Cliente
+
+1. Coordina una pausa de escrituras. Con la cuenta propietaria, incorpora `apps-script/Reset.gs` al mismo proyecto de Apps Script conectado y ejecuta `reiniciarDatosCliente()` desde el editor. Es una operacion administrativa excepcional, no un endpoint de la API ni una accion de la interfaz. No exige republicar la aplicacion web, migrar la instalacion o cambiar su URL.
+2. Antes de borrar, la funcion crea un Google Spreadsheet privado en la cuenta propietaria con respaldo de todas las hojas definidas en `SCHEMA`. Conserva y verifica el enlace mostrado en el registro de ejecucion; no lo publiques. El respaldo conserva los datos previos fuera del libro operativo.
+3. Se vacian exclusivamente las filas de datos de `MOVIMIENTOS`, `CUENTAS` y `AUDITORIA`, manteniendo los encabezados. Se conservan `JEFES`, `CATEGORIAS`, `FORMAS_PAGO`, `ESTADOS` y `CONFIGURACION`, incluidos IDs, metadatos y cambios del usuario. No se crean cuentas, asignaciones de fondos ni movimientos ficticios.
+4. Tras la ejecucion, verifica las tres hojas financieras vacias. Actualiza la aplicacion, limpia busqueda y TODOS los filtros, descarta borradores de las pruebas y verifica cero movimientos e indicadores en cero, con los catalogos conservados y sin errores de carga. Retirar archivos del repositorio no sustituye esta verificacion remota.
+5. Registra directamente el primer movimiento real autorizado, con comprobante opcional y sin cuentas ni saldo inicial. Recarga para comprobar persistencia en Sheets y nueva auditoria; exporta desde Reportes, verifica el archivo y guardalo en una ubicacion autorizada. No uses nuevos registros ficticios para validar el inicio.
+
+El reinicio no cambia credenciales. Antes de entregar acceso al cliente, rota por separado las credenciales en las variables privadas del servidor y verifica el acceso; nunca publiques contrasenas, secretos ni tokens. Fuera de este reinicio explicitamente autorizado, sigue vigente la anulacion con historial y no existe borrado fisico financiero en la interfaz normal ni en la API.
 
 ## Funciones
 
@@ -42,7 +50,7 @@ La capa Node es necesaria para un frontend independiente sin exponer secretos y 
 
 El username auditado procede de la sesion verificada, no del formulario. Todos los usuarios de estas credenciales comparten la misma identidad y pueden administrar catalogos; no hay roles ni atribucion por persona. Las nuevas auditorias usan el username compartido; se conservan los correos de registros y auditorias historicos, sin reescribirlos.
 
-La contrasena y los secretos viven exclusivamente en `.env` local o variables privadas del servidor, nunca en Sheets ni en el bundle/configuracion publica del frontend. Los datos financieros y las URLs se almacenan exclusivamente en Sheets; la app no crea ni administra archivos de Drive. No uses prefijos `VITE_` para secretos ni publiques `.env` en Git. `/api/config` solo publica `{authMode: "password", configured: true/false}`, sin usuario, contrasena ni secretos.
+La contrasena y los secretos viven exclusivamente en `.env` local o variables privadas del servidor, nunca en Sheets ni en el bundle/configuracion publica del frontend. Los datos financieros y las URLs se almacenan exclusivamente en Sheets; la app no crea ni administra comprobantes de Drive. El respaldo privado del reinicio excepcional se crea por separado desde el editor del propietario, no desde la app. No uses prefijos `VITE_` para secretos ni publiques `.env` en Git. `/api/config` solo publica `{authMode: "password", configured: true/false}`, sin usuario, contrasena ni secretos.
 
 No hay bloqueo distribuido ni limite de intentos de contrasena implementado. El endpoint publico de login permite intentos repetidos sin limite propio; validar Origin no impide ataques desde clientes externos. Para produccion real, configura y verifica reglas de firewall/rate limiting en Vercel para `/api/login` y `/api/index?action=login`, y utiliza una contrasena aleatoria fuerte. Esta proteccion es una recomendacion pendiente, no una capacidad ya implementada.
 
@@ -140,7 +148,7 @@ Abre **http://localhost:5173**. `npm run dev` inicia Vite y la API en el puerto 
 6. Verifica la fila en `MOVIMIENTOS`: ID unico, usuario de registro y timestamps. Verifica una entrada `CREAR` en `AUDITORIA`.
 7. Recarga el navegador. El movimiento debe seguir apareciendo porque se consulta Sheets, no una lista de demostracion.
 
-Para finanzas reales, usa un Spreadsheet de pruebas separado para demostraciones. En esta entrega academica, el propietario autorizo expresamente los 20 registros `[DEMO]` en el documento conectado. No insertes las fixtures de las pruebas automatizadas ni mezcles demostraciones con operaciones reales sin una autorizacion explicita.
+Para practicar, usa un Spreadsheet de pruebas separado. La demostracion de esta entrega ya concluyo; no insertes fixtures de las pruebas automatizadas ni nuevos datos ficticios en el almacenamiento del cliente.
 
 ## 6. Probar Consultas Y Pagos
 
@@ -214,7 +222,7 @@ npm run test:e2e
 
 Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de API y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, login por contrasena, movimientos sin cuentas, reintentos, pagos vinculados, filtros de inversion, comprobantes por URL, preservacion historica y archivos Excel/PDF reales. No equivale a una prueba de autenticacion/Sheets ni de acceso a comprobantes en vivo.
 
-Verificacion de esta version: build correcto, 47 pruebas unitarias/HTTP y 26 pruebas de navegador aprobadas. Se comprobo la lectura conectada, el registro del lote ficticio autorizado y la restriccion de cuentas historicas de solo lectura. El registro preexistente no fue modificado. Las pruebas locales validan tambien el manual PDF y que el Excel publico contenga exclusivamente los 20 registros de demostracion.
+Verificacion: build correcto y 51 pruebas unitarias/HTTP aprobadas. La suite de navegador conserva sus 26 casos de uso. Se verifican el manual y PDF, la ausencia de los recursos de demostracion, el respaldo previo, la conservacion de encabezados/catalogos y la restauracion ante fallos del reinicio. Las pruebas locales no acreditan que el propietario haya ejecutado el borrado remoto.
 
 La API reintenta hasta tres veces las consultas cuando Google devuelve una respuesta temporal invalida o falla el transporte, dentro de un unico plazo de 55 segundos. No reintenta automaticamente escrituras ni errores de validacion del script. Si falla un guardado, conserva el borrador y su clave de idempotencia.
 
@@ -230,6 +238,7 @@ La API reintenta hasta tres veces las consultas cuando Google devuelve una respu
 | `server/handler.ts`, `server/security.ts`, `server/dev.ts` | API, autenticacion y servidor local |
 | `api/*.ts` | Entradas de funciones Vercel |
 | `apps-script/Code.gs`, `apps-script/appsscript.json` | API Sheets, configuracion y auditoria, sin cargas ni alcance Drive |
+| `apps-script/Reset.gs` | Reinicio excepcional solo desde el editor por el propietario: respaldo privado y vaciado financiero, conservando encabezados y catalogos |
 | `server/CONTRACT.md` | Contrato detallado de endpoints, campos y limites |
 | `tests/`, `e2e/`, `playwright.config.ts` | Pruebas automatizadas |
 | `.env.example`, `vercel.json`, `vite.config.ts` | Configuracion local y despliegue |
@@ -237,4 +246,4 @@ La API reintenta hasta tres veces las consultas cuando Google devuelve una respu
 
 ## Configuracion De Otra Instalacion
 
-Para otra instalacion, configura el usuario/contrasena y las variables privadas de la seccion 3, incorpora `Code.gs` y su manifiesto, publica una version y autoriza Sheets. La instalacion actual ya esta conectada; agregar el manual no exige actualizar Apps Script. Conserva las tablas y datos, y no crees cuentas para activar el registro. El acceso a comprobantes se controla por separado en Google. Antes de produccion real, cambia credenciales de demostracion y verifica firewall/rate limiting de login. No compartas contrasenas, secretos o tokens por chat; configura los valores en tu entorno o panel privado de Vercel.
+Para otra instalacion, configura el usuario/contrasena y las variables privadas de la seccion 3, incorpora `Code.gs` y su manifiesto, publica una version y autoriza Sheets. La instalacion actual ya esta conectada; agregar el manual no exige actualizar la API de Apps Script. Conserva las tablas y datos salvo el reinicio financiero excepcional autorizado y descrito arriba; no crees cuentas para activar el registro. El acceso a comprobantes se controla por separado en Google. Antes de produccion real, rota por separado las credenciales del cliente y verifica firewall/rate limiting de login. No compartas contrasenas, secretos o tokens por chat; configura los valores en tu entorno o panel privado de Vercel.
