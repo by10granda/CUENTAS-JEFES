@@ -9,6 +9,12 @@ import { exportExcel, exportPDF } from './reports';
 import type { Bootstrap, Filters, Movement, User } from './types';
 
 const Dashboard = lazy(() => import('./Dashboard'));
+const PersonalWorkspace = lazy(() => import('./personal/PersonalWorkspace'));
+function authorizedUser(value: User | null): User | null {
+  if (value === null) return null;
+  if (!value || typeof value.username !== 'string' || typeof value.name !== 'string' || !['gerencia', 'personal'].includes(value.role)) throw new Error('Perfil no autorizado. Contacta al administrador.');
+  return value;
+}
 
 type Page = 'dashboard' | 'movements' | 'pending' | 'reports' | 'catalogs';
 const pages = [
@@ -18,7 +24,7 @@ const pages = [
   { id: 'reports' as const, title: 'Reportes', short: 'Reportes', icon: FileBarChart2, subtitle: 'La información que necesitas, lista para compartir.' },
   { id: 'catalogs' as const, title: 'Configuración', short: 'Configuración', icon: Settings2, subtitle: 'Responsables y criterios de registro.' },
 ];
-function Brand({ light = false }: { light?: boolean }) { return <div className={`brand ${light ? 'light' : ''}`}><span className="brand-mark"><Wallet size={23} strokeWidth={1.6} /></span><div><strong>cuentas<span>.</span></strong><small>GERENCIA</small></div></div>; }
+function Brand({ light = false, module = 'GERENCIA' }: { light?: boolean; module?: string }) { return <div className={`brand ${light ? 'light' : ''}`}><span className="brand-mark"><Wallet size={23} strokeWidth={1.6} /></span><div><strong>cuentas<span>.</span></strong><small>{module}</small></div></div>; }
 
 export default function App() {
   const [authConfigured, setAuthConfigured] = useState(false);
@@ -39,7 +45,7 @@ export default function App() {
         if (config.authMode !== 'password' || !config.configured) throw new Error('El acceso con usuario y contraseña todavía no está configurado.');
         if (cancelled) return;
         setAuthConfigured(true);
-        try { const session = await api<{ user: User | null }>('session'); if (!cancelled) setUser(session.user); }
+        try { const session = await api<{ user: User | null }>('session'); if (!cancelled) setUser(authorizedUser(session.user)); }
         catch (cause) { if (!cancelled) setAuthError(errorMessage(cause)); }
       } catch (cause) { if (!cancelled) { setAuthConfigured(false); setConfigError(errorMessage(cause)); } }
       finally { if (!cancelled) setInitializing(false); }
@@ -55,17 +61,21 @@ export default function App() {
   async function login() {
     if (!authConfigured || initializing || authBusy || !username || !password) return;
     setAuthBusy(true); setAuthError('');
-    try { const session = await api<{ user: User }>('login', { username, password }); setPassword(''); setUser(session.user); }
+    try { const session = await api<{ user: User }>('login', { username, password }); const next = authorizedUser(session.user); setPassword(''); setUser(next); }
     catch (cause) { setAuthError(errorMessage(cause)); }
     finally { setAuthBusy(false); }
   }
   async function logout() {
     await api('logout', {}); setUser(null);
   }
-  if (!initializing && user && authConfigured) return <Workspace key={user.username} user={user} onLogout={logout} />;
-  return <div className="login-page"><section className="login-story"><Brand light /><div className="story-content"><span className="eyebrow">ADMINISTRACIÓN FINANCIERA</span><h1>Claridad en cada<br />movimiento.<br /><em>Control en cada<br />decisión.</em></h1><p>Un espacio de trabajo para consultar la inversión registrada y dar seguimiento a los compromisos de gerencia.</p><div className="story-rule" /><div className="story-features"><span><BookOpen size={18} /> Registro ordenado</span><span><ShieldCheck size={18} /> Acceso autorizado</span><span><FileBarChart2 size={18} /> Reportes verificables</span></div></div><footer>CUENTAS / GERENCIA<span>Información real. Decisiones informadas.</span></footer><div className="story-decoration" aria-hidden="true"><span /><span /><span /></div></section>
+  if (!initializing && user && authConfigured) {
+    if (user.role === 'gerencia') return <Workspace key={user.username} user={user} onLogout={logout} />;
+    if (user.role === 'personal') return <Suspense fallback={<p role="status">Cargando espacio personal...</p>}><PersonalWorkspace key={user.username} user={user} onLogout={logout} /></Suspense>;
+    return <Alert>Perfil no autorizado. No se cargarán datos.</Alert>;
+  }
+  return <div className="login-page"><section className="login-story"><Brand light module="FINANZAS" /><div className="story-content"><span className="eyebrow">ADMINISTRACIÓN FINANCIERA</span><h1>Claridad en cada<br />movimiento.<br /><em>Control en cada<br />decisión.</em></h1><p>Un espacio protegido para consultar tus registros financieros y dar seguimiento a tus compromisos. Tu perfil autorizado determina el espacio disponible.</p><div className="story-rule" /><div className="story-features"><span><BookOpen size={18} /> Registro ordenado</span><span><ShieldCheck size={18} /> Acceso autorizado</span><span><FileBarChart2 size={18} /> Reportes verificables</span></div></div><footer>CUENTAS<span>Información real. Decisiones informadas.</span></footer><div className="story-decoration" aria-hidden="true"><span /><span /><span /></div></section>
     <main className="login-main"><div className="login-top"><span>PLATAFORMA DE GESTIÓN</span><ShieldCheck size={19} /></div><div className="login-card"><span className="login-kicker">BIENVENIDO A TU ESPACIO</span><h2>Accede a tu espacio</h2><p className="login-description">Inicia sesión con el usuario y la contraseña autorizados por la organización.</p>
-      {initializing ? <div className="login-loading"><LoaderCircle className="spin" size={22} /> Verificando configuración y sesión...</div> : configError ? <><Alert>{configError}</Alert><div className="setup-guide"><h3>Configuración necesaria</h3><p>El administrador debe configurar en el servidor <code>APP_USERNAME</code>, <code>APP_PASSWORD</code> (entre 8 y 512 caracteres; usa una contraseña fuerte), <code>SESSION_SECRET</code> (al menos 32 caracteres), <code>GAS_WEB_APP_URL</code> y <code>GAS_API_SECRET</code>.</p><p>En desarrollo, ejecuta la API en el puerto 3001 y abre <code>http://localhost:5173</code>. No coloques credenciales ni secretos en variables <code>VITE_*</code> ni en el navegador. No hay acceso a datos privados hasta completar la configuración del servidor.</p>
+      {initializing ? <div className="login-loading"><LoaderCircle className="spin" size={22} /> Verificando configuración y sesión...</div> : configError ? <><Alert>{configError}</Alert><div className="setup-guide"><h3>Configuración necesaria</h3><p>El administrador debe configurar en el servidor <code>APP_USERNAME</code> y <code>APP_PASSWORD</code> para gerencia, o <code>PERSONAL_USERNAME</code> y <code>PERSONAL_PASSWORD</code> para el espacio personal. Las contraseñas deben tener entre 8 y 512 caracteres; usa contraseñas fuertes. Se requiere <code>SESSION_SECRET</code> de al menos 32 caracteres. La conexión de gerencia utiliza <code>GAS_WEB_APP_URL</code> y <code>GAS_API_SECRET</code>; el espacio personal requiere su conexión privada independiente.</p><p>En desarrollo, ejecuta la API en el puerto 3001 y abre <code>http://localhost:5173</code>. No coloques credenciales ni secretos en variables <code>VITE_*</code> ni en el navegador. No hay acceso a datos privados hasta completar la configuración del servidor.</p>
       </div><button className="button secondary" onClick={() => setRevision(revision + 1)}><RefreshCw size={16} /> Verificar de nuevo</button>
       </> : <>{authError && <Alert>{authError}</Alert>}<form className="login-form" aria-label="Iniciar sesión" aria-busy={authBusy} onSubmit={event => { event.preventDefault(); void login(); }}><label>Usuario<input name="username" autoComplete="username" required maxLength={100} value={username} disabled={authBusy} onChange={event => setUsername(event.target.value)} />
       </label><label>Contraseña<input name="password" type="password" autoComplete="current-password" required maxLength={512} value={password} disabled={authBusy} onChange={event => setPassword(event.target.value)} />

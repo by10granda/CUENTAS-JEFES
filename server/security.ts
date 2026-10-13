@@ -3,7 +3,8 @@ import type { IncomingMessage } from 'node:http';
 
 export const COOKIE_NAME = 'gerencia_session';
 export const SESSION_SECONDS = 8 * 60 * 60;
-export type User = { username: string; name: string };
+export type Role = 'gerencia' | 'personal';
+export type User = { username: string; name: string; role: Role };
 
 export function sessionSecret(): string {
   const secret = process.env.SESSION_SECRET || '';
@@ -11,12 +12,20 @@ export function sessionSecret(): string {
   return secret;
 }
 
+function configuredProfiles(): { username: string; password: string; role: Role }[] {
+  try { sessionSecret(); } catch { return []; }
+  const profiles = (['gerencia', 'personal'] as const).map(role => ({
+    role,
+    username: process.env[role === 'gerencia' ? 'APP_USERNAME' : 'PERSONAL_USERNAME'] || '',
+    password: process.env[role === 'gerencia' ? 'APP_PASSWORD' : 'PERSONAL_PASSWORD'] || '',
+  })).filter(({ username, password }) => !!username.trim() && username.length <= 100 &&
+    !/[\x00-\x1f\x7f-\x9f]/.test(username) && password.length >= 8 && password.length <= 512 && !!password.trim());
+  if (profiles.length === 2 && profiles[0].username === profiles[1].username) return [];
+  return profiles;
+}
+
 export function authConfigured(): boolean {
-  const username = process.env.APP_USERNAME || '';
-  const password = process.env.APP_PASSWORD || '';
-  try { sessionSecret(); } catch { return false; }
-  return !!username.trim() && username.length <= 100 && !/[\x00-\x1f\x7f-\x9f]/.test(username) &&
-    password.length >= 8 && password.length <= 512 && !!password.trim();
+  return configuredProfiles().length > 0;
 }
 
 export function authenticate(username: unknown, password: unknown): User | null {
@@ -24,19 +33,24 @@ export function authenticate(username: unknown, password: unknown): User | null 
       /[\x00-\x1f\x7f-\x9f]/.test(username) || typeof password !== 'string' || !password || password.length > 512) return null;
   // Raw credentials live only in server env; there is no password-hash database. Use a strong random password.
   const digest = (value: string) => createHash('sha256').update(value).digest();
-  const usernameMatches = timingSafeEqual(digest(username), digest(process.env.APP_USERNAME!));
-  const passwordMatches = timingSafeEqual(digest(password), digest(process.env.APP_PASSWORD!));
-  return usernameMatches && passwordMatches ? { username, name: username } : null;
+  let user: User | null = null;
+  for (const profile of configuredProfiles()) {
+    const usernameMatches = timingSafeEqual(digest(username), digest(profile.username));
+    const passwordMatches = timingSafeEqual(digest(password), digest(profile.password));
+    if (usernameMatches && passwordMatches) user = { username, name: username, role: profile.role };
+  }
+  return user;
 }
 
-function authVersion(): string {
-  return createHmac('sha256', sessionSecret()).update(JSON.stringify([process.env.APP_USERNAME, process.env.APP_PASSWORD])).digest('base64url');
+function authVersion(profile: { role: Role; username: string; password: string }): string {
+  return createHmac('sha256', sessionSecret()).update(JSON.stringify([profile.role, profile.username, profile.password])).digest('base64url');
 }
 
-export function signSession(user: User, now = Date.now()): string {
+export function signSession(user: Omit<User, 'role'> & { role?: Role }, now = Date.now()): string {
   sessionSecret();
-  if (!authConfigured() || user.username !== process.env.APP_USERNAME) throw new Error('Password login is not configured or user is invalid');
-  const payload = Buffer.from(JSON.stringify({ username: user.username, name: user.name, exp: Math.floor(now / 1000) + SESSION_SECONDS, authVersion: authVersion() })).toString('base64url');
+  const profile = configuredProfiles().find(profile => profile.username === user.username && (user.role === undefined || profile.role === user.role));
+  if (!profile) throw new Error('Password login is not configured or user is invalid');
+  const payload = Buffer.from(JSON.stringify({ username: user.username, name: user.name, role: profile.role, exp: Math.floor(now / 1000) + SESSION_SECONDS, authVersion: authVersion(profile) })).toString('base64url');
   return `${payload}.${createHmac('sha256', sessionSecret()).update(payload).digest('base64url')}`;
 }
 
@@ -50,12 +64,14 @@ export function readSession(token: string | undefined, now = Date.now()): User |
   try {
     const value = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
     if (!Number.isSafeInteger(value.exp) || value.exp <= Math.floor(now / 1000) ||
-        typeof value.username !== 'string' || typeof value.name !== 'string' || value.username !== process.env.APP_USERNAME ||
+        typeof value.username !== 'string' || typeof value.name !== 'string' ||
         typeof value.authVersion !== 'string') return null;
+    const profile = configuredProfiles().find(profile => profile.role === value.role && profile.username === value.username);
+    if (!profile) return null;
     const version = Buffer.from(value.authVersion, 'base64url');
-    const current = Buffer.from(authVersion(), 'base64url');
+    const current = Buffer.from(authVersion(profile), 'base64url');
     if (version.length !== current.length || !timingSafeEqual(version, current)) return null;
-    return { username: value.username, name: value.name };
+    return { username: value.username, name: value.name, role: profile.role };
   } catch { return null; }
 }
 

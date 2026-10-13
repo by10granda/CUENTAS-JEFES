@@ -57,6 +57,7 @@ test('password login retains failed credentials, clears password on success and 
     { username: testUser.username, password: testPassword },
   ]);
   await expect(page.locator('.user-card small')).toHaveText(testUser.username);
+  expect(mock.user?.role).toBe('gerencia');
   const openMenu = page.getByRole('button', { name: 'Abrir navegación', exact: true });
   if (await openMenu.isVisible()) await openMenu.click();
   await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).click();

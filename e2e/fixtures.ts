@@ -1,7 +1,7 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import type { AccountRow, Bootstrap, CatalogRow, Movement, MovementInput, User } from '../src/types';
 
-export const testUser: User = { username: 'browser-test', name: 'Usuario de prueba' };
+export const testUser: User = { username: 'browser-test', name: 'Usuario de prueba', role: 'gerencia' };
 export const testPassword = 'test-only-password-123';
 
 const timestamp = '2026-10-07T12:00:00.000Z';

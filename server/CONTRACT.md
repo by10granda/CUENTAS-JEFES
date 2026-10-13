@@ -2,7 +2,7 @@
 
 ## Runtime And Environment
 
-The frontend calls `/api/index?action=ACTION` on its own origin with cookies enabled. Shared password login requires no Gmail, OAuth client IDs, or Google Cloud configuration. Login environment variables are unchanged; no new Google credentials are needed. Credentials and secrets belong only in private server environment variables, never Sheets, public config, or `VITE_*` variables. Financial data and optional receipt URLs are stored solely in Sheets; the application does not upload or manage Drive files. Opening a private receipt requires the viewer's separate Google access. Run the development API with `npx tsx server/dev.ts`; it loads the root `.env` and listens on `127.0.0.1:3001`.
+The frontend calls `/api/index?action=ACTION` on its own origin with cookies enabled. Password login requires no Gmail, OAuth client IDs, or Google Cloud configuration. Gerencia retains its existing environment variables and Sheet; Personal adds a separate profile/project described below. Credentials and secrets belong only in private server environment variables, never Sheets, public config, or `VITE_*` variables. Gerencia stores financial data and optional receipt URLs solely in Sheets and does not upload/manage Drive files; Personal has optional private uploads. Opening a private receipt requires the viewer's separate Google access. Run the development API with `npx tsx server/dev.ts`; it loads the root `.env` and listens on `127.0.0.1:3001`.
 
 | Node environment variable | Required | Value |
 | --- | --- | --- |
@@ -38,8 +38,8 @@ HTTP status is meaningful: 400 validation, 401 unauthenticated/incorrect credent
 | Action | Method | Body / response data |
 | --- | --- | --- |
 | `config` | GET, public | `{authMode: 'password', configured: boolean}` only; no credentials or secrets. |
-| `session` | GET, public | `{user: null}` or `{user: {username, name}}`; 503 if login is unconfigured. |
-| `login` | POST, public | Body `{username: string, password: string}`. Data `{user: {username, name}}`; `name` is the shared username. Incorrect credentials return 401; unconfigured login returns 503. |
+| `session` | GET, public | `{user: null}` or `{user: {username, name, role}}`; role is `gerencia` or `personal`; 503 if all login profiles are unconfigured. |
+| `login` | POST, public | Body `{username: string, password: string}`. Data `{user: {username, name, role}}`; `name` is the authenticated username. Incorrect credentials return 401; unconfigured login returns 503. |
 | `logout` | POST, public | No body required. Data `{user: null}`. |
 | `bootstrap` | GET, authenticated | Catalog/bootstrap object below. |
 | `movements` | GET, authenticated | Full movement array, including void records, not filtered. |
@@ -51,9 +51,27 @@ HTTP status is meaningful: 400 validation, 401 unauthenticated/incorrect credent
 
 There is no upload endpoint in Node or Apps Script. `action=upload` is unknown and returns 404, not an upload response.
 
-Use `Content-Type: application/json` for JSON writes. The browser must send an exact allowed `Origin`, including login and logout. The session is an HMAC-SHA256 signed, HttpOnly, SameSite=Lax, eight-hour cookie named `gerencia_session`, Secure in production. Every authenticated request rechecks the current username and a credential-version signature. Changing `APP_USERNAME`, `APP_PASSWORD`, or `SESSION_SECRET` invalidates previous sessions once the running server uses the new values. Unconfigured login makes `config.configured` false; `config` and `logout` remain available, while other actions return 503.
+Use `Content-Type: application/json` for JSON writes. The browser must send an exact allowed `Origin`, including login and logout. The session is an HMAC-SHA256 signed, HttpOnly, SameSite=Lax, eight-hour cookie named `gerencia_session`, Secure in production. Every authenticated request rechecks the current role, username and credential-version signature. Changing a profile's username/password invalidates its sessions; changing `SESSION_SECRET` invalidates all sessions once the running server uses the new values. When no profile is configured, `config.configured` is false; `config` and `logout` remain available, while other actions return 503.
 
-The public application link is intentionally usable by anyone with the shared username/password. All such users can manage catalogs under one shared identity; there is no per-person attribution or separate administrator role. Client-supplied user/username fields do not set the audit identity. New audit entries use the authenticated shared username; historical audit emails and creator identities are preserved.
+The public application link is intentionally usable by anyone with authorized profile credentials. People sharing Gerencia credentials manage its catalogs under one identity, without per-person attribution or a separate administrator. Session roles isolate Gerencia and Personal APIs; there is no user-management interface. Client-supplied user/username fields do not set audit identity. New Gerencia audit entries use its authenticated username; historical audit emails and creator identities are preserved.
+
+## Personal Profile And Routing
+
+Owner installation guide: `docs/PERSONAL_SETUP.md`; exact financial/action/schema contract: `apps-script/personal/CONTRACT.md`. The remaining accounting/setup/receipt sections in this document describe **Gerencia only**. Personal never uses the old book or Gerencia setup/reset.
+
+Configure private `PERSONAL_USERNAME` (same validation as APP_USERNAME, distinct from it), `PERSONAL_PASSWORD` (8..512 characters, not whitespace-only), `PERSONAL_GAS_WEB_APP_URL` (new independent `/exec`, never equal to GAS_WEB_APP_URL) and `PERSONAL_GAS_API_SECRET` (random, minimum 32 characters). Keep common `SESSION_SECRET` (minimum 32) and origin. Use an independent API secret, matching Script Property `GAS_API_SECRET` in the Personal project. Exact username equality between profiles disables login configuration. A valid single profile can log in even when the other is absent. Credentials alone enable login, not financial access; missing Personal route/setup yields real configuration errors, not sample balances.
+
+Cookie name/lifetime/flags remain shared. Each request rechecks its role and profile credential version. Password rotation invalidates that profile's sessions without data loss; common SESSION_SECRET rotation invalidates all. Personal username is the immutable ownership namespace: changing it requires a migration that is not implemented. Do not use username changes as password rotation.
+
+GET `personal-bootstrap` and `personal-backup`; POST `personal-save`, `personal-generate`, `personal-transaction`, `personal-pay`, `personal-void`, `personal-reconcile`, `personal-configure`, `personal-upload`, `personal-resolveOperation`. All require the personal session; cross-role calls return 403 before upstream access. Node supplies trusted user/secret and removes `personal-` before forwarding POST JSON to GAS. Write payloads include UUID `requestId`; business fields/optimistic tokens are defined in the source contract.
+
+Before forwarding any upstream data, Node requires exact `service: "personal-finance"` and `spreadsheetId: "1WU3UF1gTgut-Yx2dUn51Kk1fu2EHtnQSfxOOdx15-Y0"`, including error envelopes. Distinct URLs alone are not proof. Missing/mismatched markers or rejected secret return 503 without exposing old-book JSON. These deployment guards supplement, not replace, authentication. Personal `doGet` always rejects unauthenticated access with namespace metadata and no financial data.
+
+Personal is a separate execute-as-owner/Anyone web app using `apps-script/personal/Code.gs` and its own manifest (Sheets and Drive scopes). Owner must restrict the Sheet and optionally a private DRIVE_FOLDER_ID before data/uploads. Run readonly `inspectPersonalStructure`, review all tabs/compatibility, then `setupPersonalSpreadsheet`; preserves existing cells/tabs and seeds only system preferences, zero financial/catalog examples. Optional JPG/PNG/PDF uploads are <=3 MiB; URL-only receipts remain usable without folder configuration and preserve valid shared query parameters.
+
+Physical tables: Cuentas, Beneficiarios, Categorias, Obligaciones, Cuotas, Movimientos, Transferencias, Pagos, Configuracion, Auditoria, Operaciones. Append-only versions and bounded manifests expose only confirmed operations under lock; backup contains personal-scoped latest versions and full raw history, never properties/env secrets/passwords/file bytes. No destructive restore or identity migration. Pending operations block fresh writes except explicit resolution; verify actual rows, discard with reason, then use a fresh UUID only for the verified necessary operation. Reads retry transport/temporary non-JSON failures up to three attempts; writes never automatically retry. Executed transaction/pay/reconcile dates must be <= Sheet HOY; future plans are Cuotas, never automatically posted money. Full recurrence, card statement, adjustment and allocation semantics are in the source contract and manual.
+
+No connected integration with the new live Sheet has been validated; local unit/browser mock coverage is not evidence of deployment, credentials, permissions or persistence. Owner must verify actual Sheet transaction/audit/CONFIRMADA and exports before marking integration functional. No real financial data is inserted by automated tests.
 
 No distributed brute-force lockout or application-level attempt limit is implemented. The public password endpoint allows repeated attempts; Origin validation does not prevent non-browser attackers. For real production, configure and verify Vercel firewall/rate limits covering both `/api/login` and `/api/index?action=login`, and use a strong random password. This is pending operational hardening, not a delivered protection.
 
@@ -188,6 +206,6 @@ No frontend, Node or Apps Script upload exists; `upload` is rejected with 404. T
 
 ## Verification
 
-Run `npm test` for the full unit/HTTP suite; backend-only tests can be run with `npx tsx --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Tests use Node's test runner, a VM-hosted Apps Script runtime, mock Sheets and local HTTP requests, without Google writes. Verification: production build, 44 unit/HTTP tests and 26 browser tests passed. Connected reads and read-only account enforcement were checked on the updated Apps Script. No synthetic movements were inserted and existing rows were not modified.
+Run `npm test` for the full unit/HTTP suite; backend-only tests can be run with `npx tsx --test tests/backend-security.test.ts tests/backend-apps-script.test.mjs`. Tests use Node's test runner, a VM-hosted Apps Script runtime, mock Sheets and local HTTP requests, without Google writes. Run `npm run build` and `npm run test:e2e` for build/browser verification; report current results only after rerunning, not historical suite counts. Earlier connected Gerencia reads and read-only account enforcement were checked on its updated Apps Script, without inserting synthetic movements or modifying existing rows. That evidence does not cover the new Personal Sheet.
 
 The proxy retries transport/non-JSON failures for reads only, with at most three attempts sharing one 55-second timeout. Script validation/business errors and all write operations are never retried automatically. Failed creates must retain the original client idempotency key.

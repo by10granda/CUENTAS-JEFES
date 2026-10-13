@@ -8,6 +8,14 @@ Guia completa de 16 secciones: [manual en linea](https://cuentas-jefes.vercel.ap
 
 La demostracion autorizada ha concluido y queda como antecedente de validacion, no como contenido activo para el cliente. Se retiraron el Excel publico de demostracion y la utilidad de carga ficticia. La seccion 15 del manual describe la primera puesta en marcha sin volver a insertar datos de ejemplo.
 
+## Espacio Personal
+
+El acceso comun tambien admite un perfil `personal`, privado y separado de `gerencia`, con 14 secciones de cuentas, compromisos, pagos, tarjetas, calendario, reportes y respaldos. Gerencia conserva sus variables `APP_*`, su proyecto y su libro; no se borran ni migran sus tablas para activar Personal. No existe interfaz de administracion de usuarios.
+
+Instalacion del propietario: [docs/PERSONAL_SETUP.md](docs/PERSONAL_SETUP.md). Manual operativo: [public/manual-personal.html](public/manual-personal.html), imprimible/guardable como PDF desde el navegador. Fuente y contrato independientes: `apps-script/personal/Code.gs`, `apps-script/personal/appsscript.json`, `apps-script/personal/CONTRACT.md`; interfaz: `src/personal/`. Configura privadamente `PERSONAL_USERNAME`, `PERSONAL_PASSWORD`, `PERSONAL_GAS_WEB_APP_URL` y `PERSONAL_GAS_API_SECRET`, conservando `SESSION_SECRET` comun. El username es propietario del namespace: cambiarlo exige migracion no implementada; rotar password no pierde datos.
+
+El nuevo libro es `1WU3UF1gTgut-Yx2dUn51Kk1fu2EHtnQSfxOOdx15-Y0`: restringir Compartir antes de guardar finanzas. Login disponible con credenciales configuradas no significa conexion financiera activa: aun requiere despliegue/variables y verificacion del propietario en ese Sheet. Cobertura local Personal usa unidades y navegador con mocks, no acredita integracion Google en vivo ni inserta datos de muestra. Setup solo crea estructura/preferencias, cero cuentas o registros financieros. No afecta el reinicio excepcional de Gerencia descrito abajo.
+
 ## Estado De La Entrega
 
 Aplicacion desplegada en https://cuentas-jefes.vercel.app con acceso por usuario/contrasena, movimientos sin cuentas y comprobantes opcionales por URL. Durante la demostracion se comprobaron el login, las consultas protegidas y la persistencia en Sheets, incluidos pagos vinculados y pagos parciales. Las credenciales se mantienen exclusivamente en variables privadas. La aplicacion no genera datos de ejemplo automaticamente al abrirla o desplegarla.
@@ -46,9 +54,9 @@ Navegador React
     -> Google Sheets
 ```
 
-La capa Node es necesaria para un frontend independiente sin exponer secretos y para evitar el problema de CORS de Apps Script. El enlace de la aplicacion es publico: cualquier persona con el usuario y la contrasena compartidos definidos por el propietario puede iniciar sesion. Este es el acceso previsto para la asignacion; no requiere Gmail, OAuth ni Google Cloud. La API valida `APP_USERNAME` y `APP_PASSWORD` del servidor y entrega una cookie firmada de ocho horas, HttpOnly, SameSite=Lax y Secure en produccion. La sesion devuelve `{username, name}` y se revalida en cada solicitud; cambiar usuario, contrasena o `SESSION_SECRET` invalida las sesiones anteriores. Las escrituras validan Origin.
+La capa Node es necesaria para un frontend independiente sin exponer secretos y para evitar el problema de CORS de Apps Script. El enlace de la aplicacion es publico: cualquier persona con las credenciales autorizadas de su perfil puede iniciar sesion; no requiere Gmail, OAuth ni Google Cloud. Para Gerencia la API valida `APP_USERNAME` y `APP_PASSWORD`; para Personal valida las variables `PERSONAL_*` de acceso. Entrega una cookie firmada de ocho horas, HttpOnly, SameSite=Lax y Secure en produccion. La sesion devuelve `{username, name, role}` y revalida perfil/credenciales en cada solicitud; cambiarlos invalida sus sesiones, y rotar `SESSION_SECRET` invalida todas. Las escrituras validan Origin.
 
-El username auditado procede de la sesion verificada, no del formulario. Todos los usuarios de estas credenciales comparten la misma identidad y pueden administrar catalogos; no hay roles ni atribucion por persona. Las nuevas auditorias usan el username compartido; se conservan los correos de registros y auditorias historicos, sin reescribirlos.
+El username auditado procede de la sesion verificada, no del formulario. Quienes comparten las credenciales de Gerencia comparten identidad y pueden administrar sus catalogos, sin administrador separado ni atribucion por persona. Los roles `gerencia` y `personal` aislan espacios y APIs, no agregan gestion de usuarios. Las nuevas auditorias de Gerencia usan su username compartido; se conservan los correos historicos, sin reescribirlos.
 
 La contrasena y los secretos viven exclusivamente en `.env` local o variables privadas del servidor, nunca en Sheets ni en el bundle/configuracion publica del frontend. Los datos financieros y las URLs se almacenan exclusivamente en Sheets; la app no crea ni administra comprobantes de Drive. El respaldo privado del reinicio excepcional se crea por separado desde el editor del propietario, no desde la app. No uses prefijos `VITE_` para secretos ni publiques `.env` en Git. `/api/config` solo publica `{authMode: "password", configured: true/false}`, sin usuario, contrasena ni secretos.
 
@@ -222,7 +230,7 @@ npm run test:e2e
 
 Las pruebas unitarias/HTTP usan servicios aislados y un runtime simulado de Apps Script; no escriben en Google. Playwright intercepta todas las solicitudes de API y usa fixtures exclusivamente de prueba. Comprueba escritorio y movil, login por contrasena, movimientos sin cuentas, reintentos, pagos vinculados, filtros de inversion, comprobantes por URL, preservacion historica y archivos Excel/PDF reales. No equivale a una prueba de autenticacion/Sheets ni de acceso a comprobantes en vivo.
 
-Verificacion: build correcto y 51 pruebas unitarias/HTTP aprobadas. La suite de navegador conserva sus 26 casos de uso. Se verifican el manual y PDF, la ausencia de los recursos de demostracion, el respaldo previo, la conservacion de encabezados/catalogos y la restauracion ante fallos del reinicio. Las pruebas locales no acreditan que el propietario haya ejecutado el borrado remoto.
+Ejecuta estos comandos sobre la revision actual antes de reportar resultados; los conteos historicos no describen necesariamente la suite con Personal. La cobertura incluye manual/PDF, ausencia de recursos de demostracion, respaldo previo, conservacion de encabezados/catalogos y restauracion ante fallos del reinicio, junto con aislamiento y reglas financieras de Personal en mocks. Las pruebas locales no acreditan que el propietario haya ejecutado el borrado remoto de Gerencia ni activado el nuevo Sheet Personal.
 
 La API reintenta hasta tres veces las consultas cuando Google devuelve una respuesta temporal invalida o falla el transporte, dentro de un unico plazo de 55 segundos. No reintenta automaticamente escrituras ni errores de validacion del script. Si falla un guardado, conserva el borrador y su clave de idempotencia.
 

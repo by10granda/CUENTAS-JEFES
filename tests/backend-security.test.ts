@@ -12,13 +12,15 @@ beforeEach(() => {
   process.env.APP_PASSWORD = 'test-only-password-not-for-deployment';
   process.env.NODE_ENV = 'development';
   delete process.env.APP_ORIGIN;
+  delete process.env.PERSONAL_USERNAME;
+  delete process.env.PERSONAL_PASSWORD;
 });
 
 const request = (origin?: string, host = 'localhost:3001') => ({ headers: { origin, host }, socket: {} }) as IncomingMessage;
 test('credentials are exact, bounded, and fail closed for invalid server configuration', () => {
   const username = process.env.APP_USERNAME!;
   const password = process.env.APP_PASSWORD!;
-  assert.deepEqual(authenticate(username, password), { username, name: username });
+  assert.deepEqual(authenticate(username, password), { username, name: username, role: 'gerencia' });
   for (const [u, p] of [[username.toUpperCase(), password], [username, password + ' '], [username + ' ', password], [null, password], [username, 123], ['', password], [username, ''], ['x'.repeat(101), password], [username, 'x'.repeat(513)], ['test\nuser', password]]) {
     assert.equal(authenticate(u, p), null);
   }
@@ -72,14 +74,14 @@ test('HTTP password login, session, rotation, logout and configuration privacy',
     for (const path of ['/api/login', '/api/index?action=login']) {
       const response = await post(path, credentials);
       assert.equal(response.status, 200);
-      const user = { username: credentials.username, name: credentials.username };
+       const user = { username: credentials.username, name: credentials.username, role: 'gerencia' };
       assert.deepEqual(await response.json(), { success: true, data: { user } });
       const cookie = response.headers.get('set-cookie')!;
       for (const attribute of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Max-Age=28800']) assert.ok(cookie.includes(attribute));
       const cookieHeader = cookie.split(';')[0];
       const token = cookieHeader.slice(cookieHeader.indexOf('=') + 1);
       const payload = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8'));
-      assert.deepEqual(Object.keys(payload).sort(), ['authVersion', 'exp', 'name', 'username']);
+       assert.deepEqual(Object.keys(payload).sort(), ['authVersion', 'exp', 'name', 'role', 'username']);
       assert.equal(payload.username, credentials.username);
       assert.match(payload.authVersion, /^[A-Za-z0-9_-]{43}$/);
       assert.ok(!JSON.stringify(payload).includes(credentials.password));
@@ -119,7 +121,7 @@ test('HTTP password login, session, rotation, logout and configuration privacy',
 });
 
 test('HMAC sessions reject tampering, expiry, revoked users and malformed cookies', () => {
-  const user = { username: 'test-only-user', name: 'Test Only' };
+   const user = { username: 'test-only-user', name: 'Test Only', role: 'gerencia' as const };
   const token = signSession(user, 100000);
   assert.deepEqual(readSession(token, 100001), user);
   assert.equal(readSession(token, 100000 + 8 * 3600000), null);
@@ -228,7 +230,7 @@ test('authenticated proxy forwards server-only secret/user, filters and GAS conf
     const res = await realFetch(base + '/api/index?action=statistics&desde=2026-01-01', { headers: { Cookie: `gerencia_session=${token}` } });
     assert.equal(res.status, 409);
     assert.deepEqual(await res.json(), { success: false, message: 'Version en conflicto' });
-    assert.deepEqual(forwarded, { secret: 'server-only-secret', action: 'statistics', payload: { filters: { desde: '2026-01-01' } }, user: { username: 'test-only-user', name: 'Test Only' } });
+    assert.deepEqual(forwarded, { secret: 'server-only-secret', action: 'statistics', payload: { filters: { desde: '2026-01-01' } }, user: { username: 'test-only-user', name: 'Test Only', role: 'gerencia' } });
   } finally {
     globalThis.fetch = realFetch;
     delete process.env.GAS_WEB_APP_URL;

@@ -33,12 +33,29 @@ test('compiled API runs in plain Node without TypeScript source files or a TS lo
         console.log('Compiled API config OK');
       }};
       await handler(req,res);
+      process.env.NODE_ENV = 'production';
+      process.env.SESSION_SECRET = 'synthetic-runtime-session-secret-at-least-32';
+      delete process.env.APP_USERNAME;
+      delete process.env.APP_PASSWORD;
+      process.env.PERSONAL_USERNAME = 'synthetic-runtime-personal';
+      process.env.PERSONAL_PASSWORD = 'synthetic-runtime-password';
+      let response;
+      let cookie;
+      const capture = {statusCode:0,setHeader(key,value){if(key === 'Set-Cookie') cookie = value;},end(body){response = JSON.parse(body);}};
+      await handler(req,capture);
+      if (capture.statusCode !== 200 || response.data.configured !== true || Object.keys(response.data).length !== 2) throw new Error('Personal-only config failed');
+      await handler({url:'/api/login',method:'POST',socket:{},headers:{origin:'https://runtime.example',host:'runtime.example','content-type':'application/json'},body:{username:process.env.PERSONAL_USERNAME,password:process.env.PERSONAL_PASSWORD}},capture);
+      if (capture.statusCode !== 200 || response.data.user.role !== 'personal' || !cookie.includes('Secure')) throw new Error('Production personal login failed');
+      await handler({url:'/api/session',method:'GET',headers:{cookie:cookie.split(';')[0]}},capture);
+      if (capture.statusCode !== 200 || response.data.user.role !== 'personal') throw new Error('Production personal session failed');
+      console.log('Compiled production personal API OK');
     `;
     const runtime = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
       cwd: root, encoding: 'utf8',
     });
     assert.equal(runtime.status, 0, runtime.stdout + runtime.stderr);
     assert.match(runtime.stdout, /Compiled API config OK/);
+    assert.match(runtime.stdout, /Compiled production personal API OK/);
   } finally {
     rmSync(output, { recursive: true, force: true });
   }
