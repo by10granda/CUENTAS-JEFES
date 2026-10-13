@@ -21,7 +21,7 @@ beforeEach(() => {
   process.env.GAS_WEB_APP_URL = 'https://script.google.com/macros/s/test-manager/exec';
   process.env.GAS_API_SECRET = 'synthetic-manager-api-secret-at-least-32';
   process.env.PERSONAL_GAS_WEB_APP_URL = 'https://script.google.com/macros/s/test-personal/exec';
-  process.env.PERSONAL_GAS_API_SECRET = 'synthetic-personal-api-secret-at-least-32';
+  delete process.env.PERSONAL_GAS_API_SECRET;
   process.env.NODE_ENV = 'development';
   delete process.env.APP_ORIGIN;
 });
@@ -40,6 +40,7 @@ async function withApi(run: (api: (action: string, role?: Role, payload?: unknow
     if (mode.value === 'wrong-sheet') return Response.json(personalResponse({ spreadsheetId: 'another-document', success: true, data: { movements: ['private-bank-data'] } }));
     if (mode.value === 'unproven-error') return Response.json({ success: false, status: 409, message: 'private-bank-data' });
     if (mode.value === 'unauthorized') return Response.json(response({ success: false, status: 401, message: 'private-bank-data ' + process.env.PERSONAL_GAS_API_SECRET + ' ' + user('personal').username }));
+    if (mode.value === 'old-unauthorized') return Response.json({ success: false, status: 401, message: 'private-bank-data' });
     if (mode.value === 'http-unauthorized') return new Response('private-bank-data', { status: 401 });
     if (mode.value === 'business') return Response.json(response({ success: false, status: 409, message: 'Conflict' }));
     return Response.json(response({ success: true, data: { real: true } }));
@@ -93,16 +94,19 @@ test('all cross-role actions return 403 without any upstream forwarding', async 
   });
 });
 
-test('each role forwards only its own endpoint, secret, role and whitelisted engine action', async () => {
+test('each role forwards only its own endpoint, role and actions; only gerencia forwards its secret', async () => {
   await withApi(async (api, calls) => {
     for (const action of [...reads, ...writes, ...personalReads, ...personalWrites.filter(action => action !== 'personal-upload')]) {
       const personal = action.startsWith('personal-');
       const role = personal ? 'personal' : 'gerencia';
       const write = writes.includes(action) || personalWrites.includes(action);
-      assert.equal((await api(action, role, write ? { operationId: 'test-only' } : undefined)).status, 200);
+      assert.equal((await api(action, role, write ? { operationId: 'test-only', ...(personal ? { secret: 'client-secret' } : {}) } : undefined)).status, 200);
       const call = calls.at(-1)!;
       assert.equal(call.url, process.env[personal ? 'PERSONAL_GAS_WEB_APP_URL' : 'GAS_WEB_APP_URL']);
-      assert.equal(call.body.secret, process.env[personal ? 'PERSONAL_GAS_API_SECRET' : 'GAS_API_SECRET']);
+      if (personal) {
+        assert.deepEqual(Object.keys(call.body).sort(), ['action', 'payload', 'user']);
+        assert.equal(Object.hasOwn(call.body.payload, 'secret'), false);
+      } else assert.equal(call.body.secret, process.env.GAS_API_SECRET);
       assert.deepEqual(call.body.user, user(role));
       assert.equal(call.body.action, personal ? action.slice(9) : action);
       if (personal && !write) assert.deepEqual(call.body.payload, {});
@@ -136,8 +140,7 @@ test('personal reads reject unsupported query fields without forwarding; gerenci
 test('personal connection fails 503 without fallback for missing, invalid or shared endpoint', async () => {
   await withApi(async (api, calls) => {
     for (const [key, value] of [
-      ['PERSONAL_GAS_WEB_APP_URL', ''], ['PERSONAL_GAS_API_SECRET', ''],
-      ['PERSONAL_GAS_API_SECRET', 'x'.repeat(31)],
+      ['PERSONAL_GAS_WEB_APP_URL', ''],
       ['PERSONAL_GAS_WEB_APP_URL', 'https://script.google.com/macros/s/test-personal/dev'],
       ['PERSONAL_GAS_WEB_APP_URL', process.env.GAS_WEB_APP_URL!],
     ]) {
@@ -145,11 +148,30 @@ test('personal connection fails 503 without fallback for missing, invalid or sha
       process.env[key] = value;
       const response = await api('personal-bootstrap', 'personal');
       assert.equal(response.status, 503);
-      assert.match((await response.json()).message, /conexion personal privada/);
+      assert.equal((await response.json()).message, 'Falta conectar el Sheet personal: publica su Apps Script y configura su URL de aplicación web /exec.');
       process.env[key] = original;
     }
     assert.equal(calls.length, 0);
     assert.equal((await api('bootstrap', 'gerencia')).status, 200);
+  });
+});
+
+test('personal bridge needs no API secret and ignores leftover env secrets; website session is still required', async () => {
+  await withApi(async (api, calls) => {
+    for (const value of [undefined, '', 'short', 'synthetic-leftover-secret-not-for-forwarding']) {
+      if (value === undefined) delete process.env.PERSONAL_GAS_API_SECRET;
+      else process.env.PERSONAL_GAS_API_SECRET = value;
+      calls.length = 0;
+      assert.equal((await api('personal-bootstrap', 'personal')).status, 200);
+      assert.deepEqual(calls[0].body, { action: 'bootstrap', payload: {}, user: user('personal') });
+      assert.equal((await api('personal-save', 'personal', { requestId: 'test-only', secret: 'client-secret' })).status, 200);
+      assert.deepEqual(calls[1].body, { action: 'save', payload: { requestId: 'test-only' }, user: user('personal') });
+    }
+    calls.length = 0;
+    assert.equal((await api('personal-bootstrap')).status, 401);
+    assert.equal(calls.length, 0);
+    assert.equal((await api('bootstrap', 'gerencia')).status, 200);
+    assert.equal(calls[0].body.secret, process.env.GAS_API_SECRET);
   });
 });
 
@@ -173,21 +195,21 @@ test('personal namespace proof rejects misrouted data and errors without leaking
       }
     }
     calls.length = 0; mode.value = 'ok';
-    process.env.PERSONAL_GAS_API_SECRET = 'x'.repeat(32);
     assert.deepEqual(await (await api('personal-bootstrap', 'personal')).json(), { success: true, data: { real: true } });
     assert.equal(calls.length, 1);
     assert.deepEqual(await (await api('bootstrap', 'gerencia')).json(), { success: true, data: { real: true } });
   });
 });
 
-test('personal upstream authentication failures are private configuration errors; expired sessions remain 401', async () => {
+test('old personal upstream 401 instructs public deployment; expired website sessions remain 401', async () => {
+  process.env.PERSONAL_GAS_API_SECRET = 'synthetic-leftover-secret-not-for-forwarding';
   await withApi(async (api, calls, mode) => {
-    for (const value of ['unauthorized', 'http-unauthorized']) {
+    for (const value of ['unauthorized', 'http-unauthorized', 'old-unauthorized']) {
       calls.length = 0; mode.value = value;
       const response = await api('personal-bootstrap', 'personal');
       assert.equal(response.status, 503);
       const result = await response.json();
-      assert.match(result.message, /Configuracion de conexion personal/);
+      assert.equal(result.message, 'Publica la versión actual de Apps Script sin clave y permite acceso a Cualquier persona.');
       for (const privateValue of ['private-bank-data', process.env.PERSONAL_GAS_API_SECRET!, user('personal').username]) assert.ok(!JSON.stringify(result).includes(privateValue));
       assert.equal(calls.length, 1);
     }

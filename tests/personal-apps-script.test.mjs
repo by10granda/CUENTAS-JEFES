@@ -6,7 +6,6 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../apps-script/personal/Code.gs', import.meta.url), 'utf8');
 const plain = v => JSON.parse(JSON.stringify(v));
-const secret = 'synthetic-test-only-secret-not-for-deployment';
 const namespace = { service: 'personal-finance', spreadsheetId: '1WU3UF1gTgut-Yx2dUn51Kk1fu2EHtnQSfxOOdx15-Y0' };
 
 function harness() {
@@ -41,7 +40,7 @@ function harness() {
     insertSheet: name => { assert.equal(held, true); writes++; return sheets[name] = new Sheet(name); },
     getSpreadsheetTimeZone: () => 'America/Guayaquil'
   };
-  const props = { GAS_API_SECRET: secret };
+  const props = {};
   const files = [];
   let folderAccess = 'PRIVATE', folderFailure = false, simulatedToday = null;
   const context = vm.createContext({
@@ -70,7 +69,7 @@ function harness() {
   });
   vm.runInContext(source, context, { filename: 'personal/Code.gs' });
   const call = (action, payload = {}, extra = {}) => {
-    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ secret, action, payload, user: { username: 'owner', name: 'Synthetic Owner', role: 'personal' }, ...extra }) } }));
+    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ action, payload, user: { username: 'owner', name: 'Synthetic Owner', role: 'personal' }, ...extra }) } }));
     assert.equal(result.service, namespace.service); assert.equal(result.spreadsheetId, namespace.spreadsheetId);
     if (!result.success) {
       assert.equal(typeof result.message, 'string'); assert.ok(result.message.length > 0);
@@ -132,12 +131,14 @@ test('setup preserves data, appends optional headers, seeds only system preferen
   assert.equal(b.configuracion.UPLOAD_ENABLED, false); assert.equal(h.rows('Configuracion').length, 6);
 });
 
-test('public GET, weak secret, identity, routing and lock contention are rejected', () => {
+test('public GET/POST need no secret; malformed claimed identity, unknown fields, routing and lock contention fail validation', () => {
   const h = harness(); h.setup();
-  assert.deepEqual(JSON.parse(h.context.doGet()), { ...namespace, success: false, status: 401, message: 'Se requiere una solicitud POST autenticada.' });
-  assert.equal(h.call('bootstrap', {}, { secret: 'wrong' }).status, 401);
-  h.props.GAS_API_SECRET = 'weak'; assert.equal(h.call('bootstrap', {}, { secret: 'weak' }).status, 401); h.props.GAS_API_SECRET = secret;
-  for (const user of [null, { username: 'owner', name: 'X', role: 'admin' }, { username: ' owner ', name: 'X', role: 'personal' }]) assert.equal(h.call('bootstrap', {}, { user }).success, false);
+  assert.deepEqual(JSON.parse(h.context.doGet()), { ...namespace, success: true, data: { connected: true, initialized: true } });
+  assert.equal(h.call('bootstrap').success, true);
+  assert.equal(h.call('bootstrap', {}, { secret: 'not-required' }).status, 400, 'removed secret input is an unknown key, not an authentication credential');
+  h.props.GAS_API_SECRET = 'ignored-old-property'; assert.equal(h.call('bootstrap').success, true);
+  delete h.props.GAS_API_SECRET;
+  for (const user of [null, { username: 'owner', name: 'X', role: 'admin' }, { username: ' owner ', name: 'X', role: 'personal' }, { username: 1, name: 'X', role: 'personal' }, { username: 'owner', name: 'X' }]) assert.equal(h.call('bootstrap', {}, { user }).status, 400);
   assert.equal(h.call('personal-bootstrap').status, 404, 'Node strips the prefix; GAS accepts bare actions only');
   assert.equal(h.mutate('constructor').status, 404); assert.equal(h.mutate('__proto__').status, 404);
   assert.equal(h.call('bootstrap', { extra: true }).status, 400);
@@ -352,7 +353,7 @@ test('verification detects unexpected changed row; no financial effect', () => {
   assert.equal(h.boot().operacionesPendientes.length, 1);
 });
 
-test('private uploads validate MIME/magic/size, never share, retry once and backup excludes secrets/bytes', () => {
+test('private Drive storage validates MIME/magic/size, never shares, retries once and public backup excludes properties/bytes', () => {
   const h = harness(), f = h.ready();
   const pdf = Buffer.from('%PDF-1.7\nsynthetic-only').toString('base64');
   const payload = { requestId: randomUUID(), filename: 'synthetic.pdf', mimeType: 'application/pdf', base64: pdf };
@@ -364,7 +365,7 @@ test('private uploads validate MIME/magic/size, never share, retry once and back
   assert.deepEqual(h.ok(h.call('upload', payload)), uploaded); assert.equal(h.files.length, 1);
   h.ok(f.tx('egress', { COMPROBANTE_URL: uploaded.url }));
   const backup = h.ok(h.call('backup')); assert.equal(backup.schemaVersion, 1); assert.equal(backup.schemas.Cuentas.includes('OP_ID'), true);
-  assert.equal(JSON.stringify(backup).includes(secret), false); assert.equal(JSON.stringify(backup).includes(pdf), false); assert.equal(JSON.stringify(backup).includes('DRIVE_FOLDER_ID'), false);
+  assert.equal(JSON.stringify(backup).includes(pdf), false); assert.equal(JSON.stringify(backup).includes('DRIVE_FOLDER_ID'), false);
   assert.equal(backup.tables.Auditoria.some(a => a.ENTIDAD === 'Drive'), true);
   assert.equal(backup.tables.Movimientos.length, 1);
 });
@@ -800,16 +801,16 @@ test('setup appends optional currency/statement columns without changing old cel
 
 test('fixed namespace metadata covers GET and malformed requests and cannot be overridden at the transport boundary', () => {
   const h = harness();
-  h.context.SpreadsheetApp.openById = () => { throw new Error('Public/error responses must not read financial data'); };
-  assert.deepEqual(JSON.parse(h.context.doGet()), { ...namespace, success: false, status: 401, message: 'Se requiere una solicitud POST autenticada.' });
+  assert.deepEqual(JSON.parse(h.context.doGet()), { ...namespace, success: true, data: { connected: true, initialized: false } });
+  h.context.SpreadsheetApp.openById = () => { throw new Error('Malformed requests must not read financial data'); };
   const invalid = JSON.parse(h.context.doPost({ postData: { contents: '{invalid' } }));
   assert.deepEqual(invalid, { ...namespace, success: false, status: 400, message: 'El contenido de la solicitud no es un JSON válido.' });
   const absent = JSON.parse(h.context.doPost());
   assert.deepEqual(absent, { ...namespace, success: false, status: 400, message: 'Los datos indicados no son válidos. Revise los campos y sus valores.' });
   const response = JSON.parse(h.context.pJson({ success: true, data: { value: 1 }, service: 'gerencia', spreadsheetId: 'wrong-document' }));
   assert.deepEqual(response, { ...namespace, success: true, data: { value: 1 } });
-  const unauthenticated = h.call('bootstrap', {}, { secret: 'wrong' });
-  assert.equal(unauthenticated.status, 401); assert.equal(Object.hasOwn(unauthenticated, 'data'), false);
+  const unknownField = h.call('bootstrap', {}, { secret: 'unknown-field' });
+  assert.equal(unknownField.status, 400); assert.equal(Object.hasOwn(unknownField, 'data'), false);
   assert.equal(h.writes(), 0);
 });
 
@@ -1002,4 +1003,61 @@ test('same-day and past execution dates remain valid, including actual early pay
   assert.equal(b.cuentas.find(a => a.ID === f.account.ID).SALDO_ACTUAL, 1006.02);
   assert.equal(b.cuentas.find(a => a.ID === f.destination.ID).SALDO_ACTUAL, 6);
   assert.equal(b.cuentas.find(a => a.ID === f.card.ID).DEUDA_ACTUAL, 106);
+});
+
+test('anonymous health reads actual tab/setup state under lock and never initializes or exposes financial data', () => {
+  const h = harness(), getSheets = h.ss.getSheets; let inspections = 0;
+  h.ss.getSheets = () => { assert.equal(h.held(), true); inspections++; return getSheets(); };
+  const health = initialized => assert.deepEqual(JSON.parse(h.context.doGet()), { ...namespace, success: true, data: { connected: true, initialized } });
+  const original = JSON.stringify(h.sheets); health(false);
+  assert.equal(h.writes(), 0); assert.equal(JSON.stringify(h.sheets), original); assert.equal(h.held(), false);
+  h.setup(); const before = h.writes(), initializedState = JSON.stringify(h.sheets); health(true);
+  assert.equal(h.writes(), before); assert.equal(JSON.stringify(h.sheets), initializedState);
+  h.sheets.Cuentas.data[0].pop(); health(false); h.sheets.Cuentas.data[0].push('FECHA_MAXIMA_PAGO'); health(true);
+  const preferences = h.sheets.Configuracion.data; h.sheets.Configuracion.data = preferences.slice(0, -1); health(false);
+  h.sheets.Configuracion.data = preferences; health(true);
+  h.sheets.Extra = new h.Sheet('Extra', [['existing unrelated data']]); health(true);
+  h.sheets.Cuotas.data[0][0] = 'UNKNOWN'; health(false);
+  assert.ok(inspections >= 8); assert.equal(h.writes(), before);
+  h.rejectLock();
+  const busy = JSON.parse(h.context.doGet()); assert.equal(busy.status, 503); assert.equal(busy.service, namespace.service);
+  assert.equal(Object.hasOwn(busy, 'data'), false); assert.equal(h.writes(), before);
+  const failed = harness(); failed.context.SpreadsheetApp.openById = () => { throw new Error('Synthetic owner spreadsheet permission failure'); };
+  assert.deepEqual(JSON.parse(failed.context.doGet()), { ...namespace, success: false, status: 500, message: 'Ocurrió un error interno. Revise el diario de operaciones antes de volver a intentar.' });
+  assert.equal(failed.writes(), 0); assert.equal(failed.held(), false);
+});
+
+test('public POST can read/export/change a known claimed username without keys or identity verification', () => {
+  const h = harness(), f = h.ready();
+  assert.deepEqual(h.props, {}); assert.equal(h.boot().configuracion.UPLOAD_ENABLED, false);
+  const getProperty = h.context.PropertiesService.getScriptProperties;
+  h.context.PropertiesService.getScriptProperties = () => {
+    const props = getProperty(); return { getProperty: key => { assert.notEqual(key, 'GAS_API_SECRET', 'backend must not look up a personal API secret'); return props.getProperty(key); } };
+  };
+  const claimed = { user: { username: 'owner', name: 'Unverified caller label', role: 'personal' } };
+  const data = h.ok(h.call('bootstrap', {}, claimed)); assert.equal(data.cuentas.length, 3);
+  const current = data.cuentas.find(a => a.ID === f.account.ID);
+  h.ok(h.mutate('save', { sheet: 'Cuentas', row: { ID: current.ID, UPDATED_AT: current.UPDATED_AT, NOMBRE: 'Publicly changed account label' } }, claimed));
+  const result = h.ok(h.mutate('transaction', { type: 'egress', FECHA: data.hoy, DESCRIPCION: 'Public caller expenditure', MONTO: 1, CUENTA: f.account.ID, CATEGORIA: f.category.ID }, claimed));
+  assert.equal(h.boot().cuentas.find(a => a.ID === f.account.ID).SALDO_ACTUAL, 999);
+  const audit = h.rows('Auditoria').find(a => a.OP_ID === result.movimientos[0].OP_ID);
+  assert.equal(audit.USERNAME, 'owner', 'audit records only the claimed namespace, not proof of caller authenticity');
+  const backup = h.ok(h.call('backup', {}, claimed)); assert.ok(backup.tables.Cuentas.length > 0); assert.equal(backup.tables.Movimientos.length, 1);
+  assert.equal(h.call('bootstrap', {}, { ...claimed, password: 'not-a-GAS-input' }).status, 400);
+  assert.equal(h.call('bootstrap', {}, { ...claimed, secret: 'not-a-GAS-input' }).status, 400);
+  assert.doesNotMatch(source, /GAS_API_SECRET|status:\s*401/);
+});
+
+test('anonymous claimed namespace can upload only when optional private folder is enabled, consuming owner storage', () => {
+  const h = harness(); h.setup();
+  const claimed = { user: { username: 'unverified-upload-caller', name: 'Caller-supplied label', role: 'personal' } };
+  const payload = { requestId: randomUUID(), filename: 'public-api-private-file.pdf', mimeType: 'application/pdf', base64: Buffer.from('%PDF-1.7\nsynthetic').toString('base64') };
+  const before = h.writes(); assert.equal(h.call('upload', payload, claimed).status, 503);
+  assert.equal(h.writes(), before); assert.equal(h.files.length, 0);
+  h.props.DRIVE_FOLDER_ID = 'synthetic-private-folder';
+  const result = h.ok(h.call('upload', payload, claimed)); assert.ok(result.url); assert.equal(h.files.length, 1);
+  assert.equal(h.files[0].getSharingAccess(), 'PRIVATE', 'storage permissions remain private although upload API is public');
+  const backup = h.ok(h.call('backup', {}, claimed)); assert.equal(backup.tables.Auditoria[0].USERNAME, claimed.user.username);
+  assert.equal(JSON.parse(backup.tables.Auditoria[0].DESPUES).url, result.url);
+  assert.equal(backup.tables.Cuentas.length, 0); assert.equal(backup.tables.Movimientos.length, 0);
 });

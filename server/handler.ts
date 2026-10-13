@@ -7,7 +7,8 @@ const WRITE = new Set(['create', 'update', 'void', 'saveCatalog']);
 const PERSONAL_READ = new Set(['personal-bootstrap', 'personal-backup']);
 const PERSONAL_WRITE = new Set(['personal-save', 'personal-generate', 'personal-transaction', 'personal-pay', 'personal-void', 'personal-reconcile', 'personal-configure', 'personal-upload', 'personal-resolveOperation']);
 const PERSONAL_IDENTITY = { service: 'personal-finance', spreadsheetId: '1WU3UF1gTgut-Yx2dUn51Kk1fu2EHtnQSfxOOdx15-Y0' };
-const PERSONAL_CONNECTION_ERROR = 'Configuracion de conexion personal invalida. Verifique el despliegue personal, su documento y PERSONAL_GAS_API_SECRET.';
+const PERSONAL_CONNECTION_ERROR = 'Configuracion de conexion personal invalida. Verifique el despliegue personal y su documento.';
+const PERSONAL_PUBLIC_DEPLOYMENT_ERROR = 'Publica la versión actual de Apps Script sin clave y permite acceso a Cualquier persona.';
 const MAX_BODY = 7 * 1024 * 1024;
 class HttpError extends Error {
   status: number;
@@ -118,13 +119,14 @@ export async function handleRequest(req: Request, res: ServerResponse): Promise<
       try { payload = raw ? { filters: JSON.parse(raw) } : { filters: Object.fromEntries([...url.searchParams].filter(([key]) => key !== 'action')) }; }
       catch { throw new HttpError(400, 'Filtros invalidos'); }
     }
+    if (personal) delete payload.secret;
     if (action === 'personal-upload') payload = validatePersonalUpload(payload);
     const endpoint = process.env[personal ? 'PERSONAL_GAS_WEB_APP_URL' : 'GAS_WEB_APP_URL'];
-    const secret = process.env[personal ? 'PERSONAL_GAS_API_SECRET' : 'GAS_API_SECRET'];
-    if (personal && (!endpoint || !secret || secret.length < 32 || !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint) || endpoint === process.env.GAS_WEB_APP_URL)) {
-      throw new HttpError(503, 'Configure una conexion personal privada: PERSONAL_GAS_WEB_APP_URL (/exec, distinto de GAS_WEB_APP_URL) y PERSONAL_GAS_API_SECRET (al menos 32 caracteres).');
+    const secret = personal ? undefined : process.env.GAS_API_SECRET;
+    if (personal && (!endpoint || !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint) || endpoint === process.env.GAS_WEB_APP_URL)) {
+      throw new HttpError(503, 'Falta conectar el Sheet personal: publica su Apps Script y configura su URL de aplicación web /exec.');
     }
-    if (!endpoint || !secret || !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint)) throw new Error('GAS connection is not configured');
+    if (!endpoint || (!personal && !secret) || !/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(endpoint)) throw new Error('GAS connection is not configured');
     let result;
     const signal = AbortSignal.timeout(55000);
     // Google occasionally returns a non-JSON response. Retry reads only, within one timeout.
@@ -133,12 +135,12 @@ export async function handleRequest(req: Request, res: ServerResponse): Promise<
       try {
         let upstream: Response;
         try {
-          upstream = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret, action: personal ? action.slice('personal-'.length) : action, payload, user }), signal, redirect: 'follow' });
+          upstream = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...(!personal ? { secret } : {}), action: personal ? action.slice('personal-'.length) : action, payload, user }), signal, redirect: 'follow' });
         } catch { throw new HttpError(502, 'No se pudo contactar con Google Sheets. Puede reintentar con la misma clave de idempotencia.'); }
-        if (personal && upstream.status === 401) throw new HttpError(503, PERSONAL_CONNECTION_ERROR);
+        if (personal && upstream.status === 401) throw new HttpError(503, PERSONAL_PUBLIC_DEPLOYMENT_ERROR);
         try { result = await upstream.json(); } catch { throw new HttpError(502, 'Respuesta invalida de Google Sheets'); }
+        if (personal && result?.success === false && result.status === 401) throw new HttpError(503, PERSONAL_PUBLIC_DEPLOYMENT_ERROR);
         if (personal && (result?.service !== PERSONAL_IDENTITY.service || result?.spreadsheetId !== PERSONAL_IDENTITY.spreadsheetId)) throw new HttpError(503, PERSONAL_CONNECTION_ERROR);
-        if (personal && result.success === false && result.status === 401) throw new HttpError(503, PERSONAL_CONNECTION_ERROR);
         if (!upstream.ok || typeof result?.success !== 'boolean') throw new HttpError(502, 'Respuesta invalida de Google Sheets');
         break;
       } catch (error) {

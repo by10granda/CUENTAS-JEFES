@@ -13,7 +13,7 @@
 <header>
   <small>CUENTAS / PERSONAL / USD</small>
   <h1>Tu dinero, con perspectiva.</h1>
-  <p>Manual de uso del espacio personal privado. Cuentas, compromisos y pagos reales, con historial y respaldo. Independiente del libro de Gerencia.</p>
+  <p>Manual de uso del espacio personal. Cuentas, compromisos y pagos reales, con historial y respaldo JSON. Independiente del libro de Gerencia; conector Apps Script publico y no autenticado.</p>
   <button type="button" onclick="window.print()">Imprimir / Guardar como PDF</button>
 </header>
 <div class="layout">
@@ -24,8 +24,16 @@
 <main>
 <section aria-labelledby="inicio">
   <h2 id="inicio">Antes de empezar</h2>
-  <p>En <strong>Accede a tu espacio</strong>, introduce el usuario y la contrasena privados que te entregue el propietario por un canal seguro. La sesion abre Personal o Gerencia segun el perfil, sin selector de roles ni administracion de usuarios. Personal no muestra ni modifica las finanzas de Gerencia.</p>
-  <p class="note warning">El propietario debe restringir el nuevo Sheet antes de guardar finanzas e instalar su proyecto Apps Script independiente. Con credenciales configuradas puedes iniciar sesion, pero sin backend publicado/configurado no puedes consultar ni guardar datos: aparece el error real y la guia de instalacion, nunca saldos de demostracion. La integracion con el libro nuevo aun requiere verificacion del propietario; las pruebas locales usan simulaciones.</p>
+  <p>En <strong>Accede a tu espacio</strong>, introduce el usuario y la contrasena del sitio que te entregue el propietario por un canal seguro. Las credenciales Personal ya estan configuradas en Vercel: el usuario final no debe configurar variables. La sesion abre Personal o Gerencia segun el perfil, sin selector de roles ni administracion de usuarios. Los roles protegen las paginas y endpoints Node (403 entre perfiles); Personal no muestra ni modifica las finanzas de Gerencia. El acceso directo a Apps Script Personal elude el login del sitio.</p>
+  <p class="note warning"><strong>Conector publico: las llamadas directas de Apps Script no tienen autenticacion. No uses datos financieros confidenciales.</strong> Cualquier persona con la URL y un username declarado puede leer y editar todo ese espacio de datos y exportar su respaldo. Si hay carpeta Drive configurada, tambien puede subir archivos y consumir almacenamiento y cuotas del propietario. Declarar un usuario no prueba identidad. Restringir el Sheet sigue siendo recomendable, pero no protege el GAS publico que ejecuta como propietario. Sin backend publicado/configurado aparece error real, nunca saldos de demostracion. La integracion sigue pendiente de publicar la fuente actualizada y verificar la URL; las pruebas locales usan simulaciones y no se han realizado escrituras de verificacion en el libro nuevo.</p>
+  <h3>Actualizacion del propietario</h3>
+  <ol>
+    <li>Abre el proyecto Apps Script Personal independiente, no el de Gerencia. Reemplaza el archivo anterior <strong>completo</strong> por <code>apps-script/personal/Code.gs</code> actualizado y usa su manifiesto <code>apps-script/personal/appsscript.json</code>. El libro <code>1WU3UF1gTgut-Yx2dUn51Kk1fu2EHtnQSfxOOdx15-Y0</code> ya esta fijado en el codigo.</li>
+    <li>Autoriza los permisos Google con la cuenta propietaria cuando la plataforma lo solicite; esta autorizacion obligatoria no se puede omitir. Los encabezados de las 11 hojas ya estan creados: esta actualizacion no cambia el esquema ni requiere repetir setup, reinicializar o sembrar dinero. La inspeccion de estructura es de solo lectura.</li>
+    <li>En <strong>Implementar &gt; Gestionar implementaciones &gt; Editar &gt; Nueva version &gt; Implementar</strong>, publica como <strong>Yo</strong>, acceso <strong>Cualquier persona</strong>. Si no existe despliegue, crea <strong>Nueva implementacion &gt; Aplicacion web</strong> con esas opciones. Guardar el editor no actualiza la version publicada.</li>
+    <li>Entrega la URL real terminada en <code>/exec</code> para configurar <strong>solo <code>PERSONAL_GAS_WEB_APP_URL</code></strong> en Node/Vercel y redesplegar Node. No se necesita secreto API ni propiedad de secreto en el script Personal; no cambies login, sesiones ni variables de Gerencia, donde el secreto sigue siendo obligatorio.</li>
+    <li>GET de <code>/exec</code> devuelve salud real en solo lectura, con <code>connected</code> e <code>initialized</code> true/false y sin datos financieros. POST permite operaciones publicas sobre el username declarado. Los marcadores de servicio/documento correcto verificados por Node no autentican al visitante.</li>
+  </ol>
   <p>Primero crea tus categorias y cuentas reales; despues, personas/empresas si las necesitas. No hay bancos, saldos, categorias ni obligaciones precargados. Toda la operacion es en USD, sin conversion de moneda. Las fechas se presentan como DD/MM/AAAA; internamente son fechas ISO. Hoy se calcula segun la zona horaria del Sheet.</p>
   <p>En movil abre el menu; usa Actualizar para volver a consultar. Filtros y orden permiten buscar referencia, factura, documento o nombres y seleccionar periodo, cuenta, banco, persona, categoria, tipo, metodo, estado, vencimiento, recurrencia y limites de monto. Limpiar filtros recupera la vista completa; cambiar de seccion los reinicia.</p>
   <p><strong>Fecha real no es vencimiento.</strong> Ingresos, gastos, transferencias, compras, pagos y conciliaciones solo admiten hoy o fechas pasadas de operaciones efectivamente realizadas. Para planificar el futuro crea un compromiso pendiente. No se ejecuta dinero automaticamente al llegar una fecha.</p>
@@ -88,11 +96,11 @@
 </section>
 <section id="historial">
   <h2>11. Historial de movimientos</h2>
-  <p>Consulta ingresos, gastos, compras/pagos de tarjeta, transferencias y ajustes, saldo resultante/deuda, egreso efectivo, referencia y documentos vinculados. Detalle permite abrir una URL segura de comprobante si tienes permiso Google.</p>
+  <p>Consulta ingresos, gastos, compras/pagos de tarjeta, transferencias y ajustes, saldo resultante/deuda, egreso efectivo, referencia y documentos vinculados. Detalle ofrece Abrir comprobante para URLs Drive admitidas; validar su formato no garantiza privacidad ni seguridad del archivo. Su acceso depende de los permisos Google independientes.</p>
   <p>Todos los asientos confirmados activos determinan saldo, aunque filtres filas. Para corregir dinero usa Anular operacion completa con motivo y registra nuevamente lo correcto; se revierten sus asientos/asignaciones, no una parte aislada. Se rechaza si dependencias posteriores impiden una reversa valida. No hay edicion silenciosa del movimiento ni borrado fisico: las versiones y auditoria permanecen.</p>
   <h3>Comprobantes opcionales</h3>
   <p>Puedes introducir URL HTTPS de archivo Drive: /file/d/ID/view, /preview o /open?id=ID, hasta 300 caracteres. Consultas comunes como usp=sharing y resourcekey se conservan. No se admiten carpetas, otros hosts, espacios ni fragmentos. Validar URL no verifica existencia ni concede permisos.</p>
-  <p>Si el propietario configura carpeta privada, puedes adjuntar JPG, PNG o PDF hasta 3 MiB. No se publica el archivo ni se guardan bytes en Sheets. Si la subida falla, conserva el formulario y verifica diario/archivo con el propietario antes de continuar con su URL real; no lo subas otra vez sin revision.</p>
+  <p>Si el propietario configura carpeta privada, puedes adjuntar JPG, PNG o PDF hasta 3 MiB. La subida no publica el archivo ni guarda bytes en Sheets; los permisos Drive son independientes del conector publico, que permite consumir almacenamiento/cuotas al subir. Una URL externa no garantiza archivo privado. Si la subida falla, conserva el formulario y verifica diario/archivo con el propietario antes de continuar con su URL real; no lo subas otra vez sin revision.</p>
 </section>
 <section id="reportes">
   <h2>12. Reportes</h2>
@@ -110,9 +118,9 @@
   <p class="note warning">Una operacion PREPARADA o PENDIENTE_CONCILIACION bloquea todas las nuevas escrituras salvo resolver. Actualiza y revisa el diario y las filas reales con el propietario. No crees otra solicitud para el mismo dinero ni confundas cerrar/descartar borrador con resolver el diario remoto.</p>
   <p>Conserva UUID y contenido exactos: una operacion confirmada puede recuperarse con la misma solicitud; una pendiente reserva la clave y no se repite. Resolver con motivo descarta explicitamente el diario pendiente, nunca confirma importes parciales. Solo tras verificar y resolver transcribe la operacion real necesaria con UUID nuevo; no dupliques una ya confirmada. Una subida incierta puede haber creado un archivo privado huerfano.</p>
   <p>Lecturas tienen hasta tres intentos ante fallos temporales; escrituras no se reintentan automaticamente. Cerrar y conservar mantiene borrador por username en memoria/sessionStorage, no permite operar offline. Conflicto de version (409) exige recargar y revisar, no sobrescribir cambios ajenos. Si falla refrescar, la pantalla identifica datos de la ultima carga confirmada.</p>
-  <h3>Respaldo privado</h3>
-  <p>Descargar respaldo JSON consulta el backend y entrega tus tablas/versiones actuales e historial completo, auditoria y diario, solo de tu namespace. No incluye variables de entorno, passwords, secretos ni bytes de comprobantes. Protege el archivo: contiene finanzas e identificadores. No existe restauracion destructiva desde la app.</p>
-  <p>El username es la identidad propietaria de los datos: cambiarlo requiere migracion no implementada. Rotar contrasena invalida sesiones sin perder datos; no cambies username para renovar acceso. Cierra sesion al terminar, especialmente en equipos compartidos.</p>
+  <h3>Respaldo JSON</h3>
+  <p>Descargar respaldo JSON consulta el backend y entrega tablas/versiones actuales e historial completo, auditoria y diario del namespace indicado. Tambien se puede exportar mediante GAS publico con URL y username declarado: no es confidencial por el login. No incluye variables de entorno, passwords, secretos ni bytes de comprobantes. Protege el archivo descargado: contiene registros e identificadores. No existe restauracion destructiva desde la app.</p>
+  <p>El username es la clave estable del espacio de datos, no un secreto ni prueba de identidad ante Apps Script. Cambiarlo requiere migracion no implementada. Rotar contrasena invalida sesiones del sitio sin perder datos, pero no bloquea llamadas directas a GAS; no cambies username para renovar acceso. Cierra sesion al terminar, especialmente en equipos compartidos.</p>
 </section>
 </main>
 </div>

@@ -27,9 +27,7 @@ function pFail(message, status) { var e = new Error(message); e.status = status 
 function pAssert(ok, message, status) { if (!ok) pFail(message, status); }
 function pUserMessage(message) {
   var messages = {
-    'Authenticated POST required': 'Se requiere una solicitud POST autenticada.',
-    'Unauthorized': 'No tiene autorización para realizar esta solicitud.',
-    'Personal identity required': 'Se requiere una sesión personal válida.',
+    'Personal identity required': 'Debe indicar los datos de usuario y el rol personal para identificar el espacio de datos.',
     'Busy; retry later': 'El servicio está ocupado. Intente nuevamente más tarde.',
     'Expected object': 'La solicitud debe contener un objeto de datos válido.',
     'Invalid JSON': 'El contenido de la solicitud no es un JSON válido.',
@@ -617,18 +615,30 @@ function pDispatch(ss, state, action, payload) {
   pAssert(Object.prototype.hasOwnProperty.call(handlers, action), 'Unknown action', 404); return pOperation(ss, state, action, payload, function (ctx) { return handlers[action](ctx, payload); });
 }
 function pJson(data) { return ContentService.createTextOutput(JSON.stringify(Object.assign({}, data, { service: 'personal-finance', spreadsheetId: PERSONAL_SPREADSHEET_ID }))).setMimeType(ContentService.MimeType.JSON); }
-function doGet() { return pJson({ success: false, status: 401, message: pUserMessage('Authenticated POST required') }); }
+function doGet() {
+  try {
+    return pLock(function () {
+      var ss = pSpreadsheet(), inspection = pInspect(ss);
+      var initialized = inspection.compatible && inspection.targets.every(function (t) { return t.exists !== false && t.headers.length > 0 && t.missing.length === 0; });
+      if (initialized) {
+        var preferences = pRead(ss, 'Configuracion');
+        initialized = ['MONEDA', 'TIMEZONE', 'DIAS_ALERTA', 'PERMITIR_SOBREGIRO', 'METODOS', 'CANAL_EMAIL'].every(function (key) {
+          return preferences.some(function (r) { return r.CLAVE === key && !r.USERNAME && !r.OP_ID; });
+        });
+      }
+      return pJson({ success: true, data: { connected: true, initialized: initialized } });
+    });
+  } catch (error) { return pJson({ success: false, status: error.status || 500, message: pUserMessage(error.status ? error.message : 'Internal failure; inspect operation journal') }); }
+}
 function doPost(e) {
   try {
     pAssert(e && e.postData && typeof e.postData.contents === 'string' && e.postData.contents.length <= 4300000, 'Invalid request');
     var request; try { request = JSON.parse(e.postData.contents); } catch (badJson) { pFail('Invalid JSON'); }
-    pKeys(request, ['secret', 'action', 'payload', 'user']);
-    var secret = PropertiesService.getScriptProperties().getProperty('GAS_API_SECRET');
-    pAssert(secret && secret.length >= 32 && request.secret === secret, 'Unauthorized', 401);
-    pAssert(request.user && request.user.role === 'personal', 'Personal identity required', 401);
+    pKeys(request, ['action', 'payload', 'user']);
+    pAssert(request.user && request.user.role === 'personal', 'Personal identity required');
     pKeys(request.user, ['username', 'name', 'role']);
     var username = pText(request.user.username, 'username', 100); pText(request.user.name, 'name', 200);
-    pAssert(username === request.user.username, 'Invalid username', 401);
+    pAssert(username === request.user.username, 'Invalid username');
     pAssert(typeof request.action === 'string', 'Invalid action'); pKeys(request.payload, Object.keys(request.payload || {}));
     return pLock(function () { var ss = pSpreadsheet(); return pJson({ success: true, data: pDispatch(ss, pState(ss, username), request.action, request.payload) }); });
   } catch (error) { return pJson({ success: false, status: error.status || 500, message: pUserMessage(error.status ? error.message : 'Internal failure; inspect operation journal') }); }
